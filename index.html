@@ -162,6 +162,7 @@ body {
   gap: 16px;
 }
 
+#tap-screen    { background: radial-gradient(ellipse at center, #1a0040 0%, #060018 100%); cursor: pointer; }
 #start-screen  { background: radial-gradient(ellipse at center, #1a0040 0%, #060018 100%); }
 #win-screen    { background: radial-gradient(ellipse at center, #003318 0%, #001008 100%); display: none; }
 #lose-screen   { background: radial-gradient(ellipse at center, #220000 0%, #080000 100%); display: none; }
@@ -356,6 +357,13 @@ body {
 </style>
 </head>
 <body>
+
+<!-- ════ TAP TO START ════ -->
+<div class="screen" id="tap-screen" onclick="tapToStart()">
+  <span class="big-emoji">🔊</span>
+  <h1>THEO'S FEEDING GAME!</h1>
+  <p class="subtitle">Tap anywhere to start!</p>
+</div>
 
 <!-- ════ START SCREEN ════ -->
 <div class="screen" id="start-screen">
@@ -600,7 +608,7 @@ function updateHUD() {
   document.getElementById('lives-display').textContent = '🧺'.repeat(Math.max(0, S.lives));
 }
 
-const ALL_SCREENS = ['start-screen','win-screen','lose-screen','name-screen','leaderboard-screen'];
+const ALL_SCREENS = ['tap-screen','start-screen','win-screen','lose-screen','name-screen','leaderboard-screen'];
 function showScreen(id) {
   ALL_SCREENS.forEach(s => {
     document.getElementById(s).style.display = (s === id) ? 'flex' : 'none';
@@ -1049,11 +1057,21 @@ document.getElementById('name-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') submitScore();
 });
 
+function tapToStart() {
+  unlockAudio();
+  // Play a little jingle so they know audio is working
+  setTimeout(() => { tone(523,'sine',0.15,0.3); }, 80);
+  setTimeout(() => { tone(659,'sine',0.15,0.3); }, 200);
+  setTimeout(() => { tone(784,'sine',0.2, 0.3); }, 320);
+  showScreen('start-screen');
+}
+
 /* ══════════════════════════════════════════════
    BOOT
 ══════════════════════════════════════════════ */
 setDifficulty('theo');
 makeStars();
+showScreen('tap-screen');
 </script>
 </body>
 </html>
