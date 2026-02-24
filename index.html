@@ -223,6 +223,45 @@ body {
   to   { transform: scale(1.06); }
 }
 
+/* ── PLAYER SELECT BUTTONS ── */
+.player-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 420px;
+}
+.player-btn {
+  font-size: clamp(20px, 4vw, 36px);
+  padding: 16px 40px;
+  border: 4px solid rgba(255,255,255,0.8);
+  border-radius: 60px;
+  color: #fff;
+  font-family: inherit;
+  cursor: pointer;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  transition: transform 0.08s, box-shadow 0.08s;
+  animation: btn-pulse 1.4s ease-in-out infinite alternate;
+}
+.player-btn:hover, .player-btn:active {
+  transform: scale(1.09) !important;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.5);
+}
+.btn-theo    { background: linear-gradient(135deg, #22bb44, #aaff22); }
+.btn-friends { background: linear-gradient(135deg, #2255ee, #aa33ff); }
+.btn-adults  { background: linear-gradient(135deg, #cc1100, #ff7700); }
+
+/* ── MODE BADGE ── */
+#mode-badge {
+  position: absolute;
+  top: 65px;
+  left: 16px;
+  font-size: clamp(12px, 2vw, 18px);
+  color: rgba(255,255,255,0.7);
+  z-index: 10;
+}
+
 /* ── CONFETTI ── */
 .confetti {
   position: fixed;
@@ -260,12 +299,12 @@ body {
   <span class="big-emoji">🧺</span>
   <h1>THEO'S FEEDING GAME!</h1>
   <p>🐢 Turtles &amp; Fish are hungry! 🐠</p>
-  <p class="subtitle">Throw food to feed them all! 🍎</p>
-  <p class="subtitle" style="color:#ffdd88;">
-    ← → arrow keys or touch to move<br>
-    SPACE or tap to throw food!
-  </p>
-  <button class="play-btn" onclick="startGame()">🧺 LET'S FEED! 🧺</button>
+  <p class="subtitle">Who's playing?</p>
+  <div class="player-btns">
+    <button class="player-btn btn-theo"    onclick="startGame('theo')">👦 Theo</button>
+    <button class="player-btn btn-friends" onclick="startGame('friends')">👫 Theo's Friends</button>
+    <button class="player-btn btn-adults"  onclick="startGame('adults')">💪 Theo's Adults</button>
+  </div>
 </div>
 
 <!-- ════ WIN SCREEN ════ -->
@@ -279,9 +318,9 @@ body {
 
 <!-- ════ LOSE SCREEN ════ -->
 <div class="screen" id="lose-screen">
-  <span class="big-emoji">😅</span>
-  <h1>Try Again!</h1>
-  <p>The animals are still hungry, Theo! 🐟</p>
+  <span class="big-emoji" id="lose-emoji">😅</span>
+  <h1 id="lose-title">Try Again!</h1>
+  <p id="lose-msg">The animals are still hungry, Theo! 🐟</p>
   <button class="play-btn" onclick="startGame()">🧺 TRY AGAIN! 🧺</button>
 </div>
 
@@ -290,6 +329,7 @@ body {
   <div id="title">🧺 THEO'S FEEDING GAME! 🧺</div>
   <div id="score-display">🌟 Fed: 0</div>
   <div id="lives-display">🧺🧺🧺</div>
+  <div id="mode-badge"></div>
   <div id="game-area">
     <div id="player">🧺</div>
     <div id="hint">arrow keys or drag to move &nbsp;|&nbsp; SPACE or tap = throw food!</div>
@@ -347,6 +387,16 @@ const ROW_EMOJIS = [
 const BOOM_EMOJIS  = ['❤️','😋','🥰','😊','💛','💚','💙','🩷'];
 const FOOD_EMOJIS  = ['🍎','🥕','🐟','🌿','🍓','🥦','🍇','🌽'];
 let foodIdx = 0;
+let gameMode = 'theo';
+let DIFF = {};
+
+function setDifficulty(mode) {
+  if (mode === 'adults') {
+    DIFF = { moveNear: 100, moveFar: 600, bulletSpd: 8, shootCd: 400, maxV: 75, changePct: 0.55, initVx: 55, initVy: 45 };
+  } else {
+    DIFF = { moveNear: 800, moveFar: 3000, bulletSpd: 3, shootCd: 900, maxV: 35, changePct: 0.35, initVx: 30, initVy: 20 };
+  }
+}
 
 /* ══════════════════════════════════════════════
    STATE
@@ -377,8 +427,8 @@ function initState() {
         emoji: ROW_EMOJIS[r][c],
         alive: true,
         el:    null,
-        vx:    (Math.random() * 2 - 1) * 30,
-        vy:    (Math.random() * 2 - 1) * 20,
+        vx:    (Math.random() * 2 - 1) * DIFF.initVx,
+        vy:    (Math.random() * 2 - 1) * DIFF.initVy,
       });
     }
   }
@@ -493,7 +543,7 @@ function makeStars() {
 function shoot() {
   if (S.gameOver || S.won) return;
   const now = performance.now();
-  if (now - S.lastShot < SHOOT_CD) return;
+  if (now - S.lastShot < DIFF.shootCd) return;
   S.lastShot = now;
 
   const area = document.getElementById('game-area');
@@ -529,7 +579,7 @@ function loop(ts) {
   // ── BULLET MOVEMENT + COLLISION
   const deadBullets = [];
   S.bullets.forEach((b, bi) => {
-    b.y -= BULLET_SPD;
+    b.y -= DIFF.bulletSpd;
     b.el.style.top = b.y + 'px';
 
     if (b.y < -40) { deadBullets.push(bi); b.el.remove(); return; }
@@ -574,7 +624,7 @@ function loop(ts) {
       return;
     }
     const ratio = Math.min(1, minDist / (S.H * 0.55));
-    S.moveMs = 800 + ratio * 2200; // 800ms when close, 3000ms when far
+    S.moveMs = DIFF.moveNear + ratio * (DIFF.moveFar - DIFF.moveNear);
   }
   alienTimer += dt;
   if (alienTimer >= S.moveMs) {
@@ -590,11 +640,11 @@ function stepAliens() {
   if (!alive.length) return;
 
   const pad = 50;
-  const maxV = 35;
+  const maxV = DIFF.maxV;
 
   alive.forEach(a => {
     // Randomly nudge direction each step
-    if (Math.random() < 0.35) {
+    if (Math.random() < DIFF.changePct) {
       a.vx += (Math.random() * 2 - 1) * 18;
       a.vy += (Math.random() * 2 - 1) * 14;
       a.vx = Math.max(-maxV, Math.min(maxV, a.vx));
@@ -661,8 +711,8 @@ function resetAlienPositions() {
   alive.forEach((a,i) => {
     a.x = marginX + (i % COLS) * spacing;
     a.y = 55 + Math.floor(i / COLS) * Math.min(70, S.H * 0.11);
-    a.vx = (Math.random() * 2 - 1) * 30;
-    a.vy = (Math.random() * 2 - 1) * 20;
+    a.vx = (Math.random() * 2 - 1) * DIFF.initVx;
+    a.vy = (Math.random() * 2 - 1) * DIFF.initVy;
     if (a.el) { a.el.style.left = a.x+'px'; a.el.style.top = a.y+'px'; }
   });
 
@@ -675,6 +725,15 @@ function triggerWin() {
   S.won = true;
   cancelAnimationFrame(rafId);
   sndWin();
+  const winH1 = document.querySelector('#win-screen h1');
+  const winP  = document.querySelector('#win-screen p');
+  if (gameMode === 'adults') {
+    winH1.textContent = 'IMPRESSIVE! 💪🎉';
+    winP.textContent  = 'You actually did it. Respect! 😤';
+  } else {
+    winH1.textContent = 'YAY THEO! 🎉';
+    winP.textContent  = 'All animals are fed! AMAZING!!';
+  }
   document.getElementById('final-score').textContent = '🌟 Fed ' + S.score + ' animals! 🌟';
   showScreen('win-screen');
   confetti();
@@ -690,7 +749,26 @@ function triggerLose() {
 /* ══════════════════════════════════════════════
    START / RESTART
 ══════════════════════════════════════════════ */
-function startGame() {
+function startGame(mode) {
+  if (mode) gameMode = mode;
+  setDifficulty(gameMode);
+
+  // Mode badge + lose screen flavour
+  const badge = document.getElementById('mode-badge');
+  if (gameMode === 'adults') {
+    badge.textContent = '💪 HARD MODE';
+    badge.style.color = '#ff6644';
+    document.getElementById('lose-emoji').textContent = '😂';
+    document.getElementById('lose-title').textContent = 'Too Slow!';
+    document.getElementById('lose-msg').textContent = 'The animals outsmarted you! 🐢💨';
+  } else {
+    badge.textContent = gameMode === 'friends' ? '👫 Theo\'s Friends' : '👦 Theo';
+    badge.style.color = 'rgba(255,255,255,0.7)';
+    document.getElementById('lose-emoji').textContent = '😅';
+    document.getElementById('lose-title').textContent = 'Try Again!';
+    document.getElementById('lose-msg').textContent = 'The animals are still hungry! 🐟';
+  }
+
   cancelAnimationFrame(rafId);
   showScreen(null);
   clearArea();
@@ -768,6 +846,7 @@ window.addEventListener('resize', () => {
 /* ══════════════════════════════════════════════
    BOOT
 ══════════════════════════════════════════════ */
+setDifficulty('theo');
 makeStars();
 </script>
 </body>
