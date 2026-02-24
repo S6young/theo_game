@@ -990,6 +990,9 @@ async function showNameEntry() {
   document.getElementById('name-score-display').textContent = '🌟 Score: ' + pendingScore;
   document.getElementById('name-error').textContent = '';
   document.getElementById('name-input').value = '';
+  const btn = document.querySelector('#name-screen .play-btn');
+  btn.textContent = '🏆 Save!';
+  btn.disabled = false;
   showScreen('name-screen');
   setTimeout(() => document.getElementById('name-input').focus(), 300);
 }
