@@ -278,6 +278,69 @@ body {
   100% { transform: translateY(110vh) rotate(720deg) scaleX(1);  opacity: 0; }
 }
 
+/* ── NAME ENTRY SCREEN ── */
+#name-screen {
+  background: radial-gradient(ellipse at center, #001a33 0%, #000a18 100%);
+  display: none;
+}
+#name-screen h2 {
+  font-size: clamp(26px, 5vw, 52px);
+  color: #FFD700;
+  text-shadow: 2px 2px 0 #AA6600, 0 0 30px #FFD700;
+  margin-bottom: 8px;
+}
+#name-input {
+  font-size: clamp(22px, 4vw, 40px);
+  font-family: inherit;
+  padding: 14px 24px;
+  border-radius: 50px;
+  border: 4px solid #FFD700;
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  text-align: center;
+  width: min(90vw, 420px);
+  outline: none;
+  box-shadow: 0 0 20px rgba(255,215,0,0.3);
+}
+#name-input::placeholder { color: rgba(255,255,255,0.4); }
+.row-btns { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+
+/* ── LEADERBOARD SCREEN ── */
+#leaderboard-screen {
+  background: radial-gradient(ellipse at center, #0a001a 0%, #04000d 100%);
+  display: none;
+  justify-content: flex-start;
+  padding-top: 30px;
+  overflow-y: auto;
+}
+#leaderboard-screen h2 {
+  font-size: clamp(28px, 5vw, 54px);
+  color: #FFD700;
+  text-shadow: 2px 2px 0 #AA6600, 0 0 30px #FFD700;
+  margin-bottom: 16px;
+}
+#lb-table {
+  width: min(95vw, 600px);
+  border-collapse: collapse;
+  margin-bottom: 24px;
+  font-size: clamp(13px, 2.4vw, 22px);
+}
+#lb-table th {
+  color: #FFD700;
+  border-bottom: 2px solid #FFD700;
+  padding: 8px 12px;
+  text-align: left;
+}
+#lb-table td {
+  color: #fff;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+}
+#lb-table tr:first-child td { color: #FFD700; font-size: 1.15em; }
+#lb-table tr:nth-child(2) td { color: #cccccc; }
+#lb-table tr:nth-child(3) td { color: #cd7f32; }
+#lb-loading { color: rgba(255,255,255,0.6); font-size: clamp(16px,3vw,28px); }
+
 /* ── CONTROLS HINT ── */
 #hint {
   position: absolute;
@@ -304,6 +367,7 @@ body {
     <button class="player-btn btn-theo"    onclick="startGame('theo')">👦 Theo</button>
     <button class="player-btn btn-friends" onclick="startGame('friends')">👫 Theo's Friends</button>
     <button class="player-btn btn-adults"  onclick="startGame('adults')">💪 Theo's Adults</button>
+    <button class="player-btn" style="background:linear-gradient(135deg,#554400,#aa8800);" onclick="showLeaderboard()">🏆 High Scores</button>
   </div>
 </div>
 
@@ -313,7 +377,10 @@ body {
   <span class="big-emoji">🏆</span>
   <p>All animals are fed! AMAZING!!</p>
   <p id="final-score" style="font-size: clamp(24px,5vw,50px); color:#FFD700; text-shadow:0 0 20px #FFD700;"></p>
-  <button class="play-btn" onclick="startGame()">🧺 FEED AGAIN! 🧺</button>
+  <div class="row-btns">
+    <button class="play-btn" onclick="showNameEntry()">🏆 Save Score</button>
+    <button class="play-btn" style="background:linear-gradient(135deg,#333,#666);" onclick="startGame()">🧺 Skip</button>
+  </div>
 </div>
 
 <!-- ════ LOSE SCREEN ════ -->
@@ -321,7 +388,36 @@ body {
   <span class="big-emoji" id="lose-emoji">😅</span>
   <h1 id="lose-title">Try Again!</h1>
   <p id="lose-msg">The animals are still hungry, Theo! 🐟</p>
-  <button class="play-btn" onclick="startGame()">🧺 TRY AGAIN! 🧺</button>
+  <div class="row-btns">
+    <button class="play-btn" onclick="showNameEntry()">🏆 Save Score</button>
+    <button class="play-btn" style="background:linear-gradient(135deg,#333,#666);" onclick="startGame()">🧺 Skip</button>
+  </div>
+</div>
+
+<!-- ════ NAME ENTRY SCREEN ════ -->
+<div class="screen" id="name-screen">
+  <span class="big-emoji">✏️</span>
+  <h2>Who fed the animals?</h2>
+  <p class="subtitle" id="name-score-display"></p>
+  <input id="name-input" type="text" maxlength="20" placeholder="Type your name..." autocomplete="off" />
+  <div class="row-btns">
+    <button class="play-btn" onclick="submitScore()">🏆 Save!</button>
+    <button class="play-btn" style="background:linear-gradient(135deg,#333,#666);" onclick="showLeaderboard()">Skip</button>
+  </div>
+  <p id="name-error" style="color:#ff8888; font-size:clamp(14px,2.5vw,22px); min-height:1.4em;"></p>
+</div>
+
+<!-- ════ LEADERBOARD SCREEN ════ -->
+<div class="screen" id="leaderboard-screen">
+  <h2>🏆 High Scores</h2>
+  <div id="lb-loading">Loading...</div>
+  <table id="lb-table" style="display:none;">
+    <thead><tr><th>#</th><th>Name</th><th>Score</th><th>Mode</th><th>Date</th></tr></thead>
+    <tbody id="lb-body"></tbody>
+  </table>
+  <div class="row-btns">
+    <button class="play-btn" onclick="showScreen('start-screen')">🧺 Play Again</button>
+  </div>
 </div>
 
 <!-- ════ GAME ════ -->
@@ -489,9 +585,10 @@ function updateHUD() {
   document.getElementById('lives-display').textContent = '🧺'.repeat(Math.max(0, S.lives));
 }
 
+const ALL_SCREENS = ['start-screen','win-screen','lose-screen','name-screen','leaderboard-screen'];
 function showScreen(id) {
-  ['start-screen','win-screen','lose-screen'].forEach(s=>{
-    document.getElementById(s).style.display = (s===id) ? 'flex' : 'none';
+  ALL_SCREENS.forEach(s => {
+    document.getElementById(s).style.display = (s === id) ? 'flex' : 'none';
   });
 }
 
@@ -841,6 +938,83 @@ window.addEventListener('resize', () => {
   const a = document.getElementById('game-area');
   S.W = a.clientWidth;
   S.H = a.clientHeight;
+});
+
+/* ══════════════════════════════════════════════
+   SUPABASE / LEADERBOARD
+══════════════════════════════════════════════ */
+const SB_URL = 'https://mrmilxmodbzipoxzobpc.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ybWlseG1vZGJ6aXBveHpvYnBjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4OTU2NTEsImV4cCI6MjA4NzQ3MTY1MX0.eeahruUHXLI73oXxhF1TadeHjnnJgL5eHpHQQY5H8LU';
+const SB_HEADERS = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' };
+
+let pendingScore = 0;
+let pendingMode  = 'theo';
+
+function showNameEntry() {
+  pendingScore = S.score || 0;
+  pendingMode  = gameMode;
+  document.getElementById('name-score-display').textContent = '🌟 Score: ' + pendingScore;
+  document.getElementById('name-error').textContent = '';
+  document.getElementById('name-input').value = '';
+  showScreen('name-screen');
+  setTimeout(() => document.getElementById('name-input').focus(), 300);
+}
+
+async function submitScore() {
+  const name = document.getElementById('name-input').value.trim();
+  if (!name) {
+    document.getElementById('name-error').textContent = 'Please enter your name!';
+    return;
+  }
+  const btn = document.querySelector('#name-screen .play-btn');
+  btn.textContent = 'Saving...';
+  btn.disabled = true;
+  try {
+    const res = await fetch(SB_URL + '/rest/v1/scores', {
+      method: 'POST',
+      headers: SB_HEADERS,
+      body: JSON.stringify({ name, score: pendingScore, mode: pendingMode }),
+    });
+    if (!res.ok) throw new Error('Failed');
+  } catch(e) {
+    document.getElementById('name-error').textContent = 'Could not save — check your connection.';
+    btn.textContent = '🏆 Save!';
+    btn.disabled = false;
+    return;
+  }
+  showLeaderboard();
+}
+
+async function showLeaderboard() {
+  showScreen('leaderboard-screen');
+  document.getElementById('lb-loading').style.display = 'block';
+  document.getElementById('lb-table').style.display  = 'none';
+  try {
+    const res = await fetch(
+      SB_URL + '/rest/v1/scores?order=score.desc&limit=15&select=name,score,mode,created_at',
+      { headers: SB_HEADERS }
+    );
+    if (!res.ok) throw new Error('Failed');
+    const rows = await res.json();
+    const body = document.getElementById('lb-body');
+    body.innerHTML = '';
+    const modeLabel = { theo: '👦', friends: '👫', adults: '💪' };
+    rows.forEach((r, i) => {
+      const date = new Date(r.created_at).toLocaleDateString();
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${['🥇','🥈','🥉'][i] || (i+1)+'.'}</td><td>${r.name}</td><td>${r.score}</td><td>${modeLabel[r.mode] || r.mode}</td><td>${date}</td>`;
+      body.appendChild(tr);
+    });
+    document.getElementById('lb-loading').style.display = 'none';
+    document.getElementById('lb-table').style.display   = 'table';
+  } catch(e) {
+    document.getElementById('lb-loading').textContent = 'Could not load scores.';
+  }
+}
+
+// Submit on Enter key in name input
+document.getElementById('name-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitScore();
 });
 
 /* ══════════════════════════════════════════════
