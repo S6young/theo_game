@@ -965,16 +965,25 @@ const SB_HEADERS = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Con
 let pendingScore = 0;
 let pendingMode  = 'theo';
 
+async function saveScore(name, score, mode) {
+  // Remove any existing entry for this name, then insert fresh
+  await fetch(SB_URL + '/rest/v1/scores?name=eq.' + encodeURIComponent(name), {
+    method: 'DELETE',
+    headers: SB_HEADERS,
+  }).catch(() => {});
+  const res = await fetch(SB_URL + '/rest/v1/scores', {
+    method: 'POST',
+    headers: SB_HEADERS,
+    body: JSON.stringify({ name, score, mode }),
+  });
+  if (!res.ok) throw new Error('Insert failed');
+}
+
 async function showNameEntry() {
   pendingScore = S.score || 0;
   pendingMode  = gameMode;
   if (gameMode === 'theo') {
-    // Auto-submit as Theo, skip name screen
-    await fetch(SB_URL + '/rest/v1/scores', {
-      method: 'POST',
-      headers: SB_HEADERS,
-      body: JSON.stringify({ name: 'Theo', score: pendingScore, mode: pendingMode }),
-    }).catch(() => {});
+    await saveScore('Theo', pendingScore, pendingMode).catch(() => {});
     showLeaderboard();
     return;
   }
@@ -995,12 +1004,7 @@ async function submitScore() {
   btn.textContent = 'Saving...';
   btn.disabled = true;
   try {
-    const res = await fetch(SB_URL + '/rest/v1/scores', {
-      method: 'POST',
-      headers: SB_HEADERS,
-      body: JSON.stringify({ name, score: pendingScore, mode: pendingMode }),
-    });
-    if (!res.ok) throw new Error('Failed');
+    await saveScore(name, pendingScore, pendingMode);
   } catch(e) {
     document.getElementById('name-error').textContent = 'Could not save — check your connection.';
     btn.textContent = '🏆 Save!';
