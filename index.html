@@ -437,8 +437,23 @@ body {
    AUDIO
 ══════════════════════════════════════════════ */
 let _ctx = null;
+function unlockAudio() {
+  if (_ctx) { _ctx.resume(); return; }
+  _ctx = new (window.AudioContext || window.webkitAudioContext)();
+  // Play a silent buffer — required to unlock audio on iOS
+  const buf = _ctx.createBuffer(1, 1, 22050);
+  const src = _ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(_ctx.destination);
+  src.start(0);
+  _ctx.resume();
+}
+document.addEventListener('touchstart', unlockAudio, { once: true });
+document.addEventListener('click',      unlockAudio, { once: true });
+
 function ac() {
   if (!_ctx) _ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (_ctx.state === 'suspended') _ctx.resume();
   return _ctx;
 }
 function tone(freq, type, dur, vol, freqEnd) {
@@ -950,9 +965,19 @@ const SB_HEADERS = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Con
 let pendingScore = 0;
 let pendingMode  = 'theo';
 
-function showNameEntry() {
+async function showNameEntry() {
   pendingScore = S.score || 0;
   pendingMode  = gameMode;
+  if (gameMode === 'theo') {
+    // Auto-submit as Theo, skip name screen
+    await fetch(SB_URL + '/rest/v1/scores', {
+      method: 'POST',
+      headers: SB_HEADERS,
+      body: JSON.stringify({ name: 'Theo', score: pendingScore, mode: pendingMode }),
+    }).catch(() => {});
+    showLeaderboard();
+    return;
+  }
   document.getElementById('name-score-display').textContent = '🌟 Score: ' + pendingScore;
   document.getElementById('name-error').textContent = '';
   document.getElementById('name-input').value = '';
