@@ -559,7 +559,7 @@ let DIFF = {};
 
 function setDifficulty(mode) {
   if (mode === 'adults') {
-    DIFF = { moveNear: 100, moveFar: 600, bulletSpd: 8, shootCd: 400, maxV: 75, changePct: 0.55, initVx: 55, initVy: 45 };
+    DIFF = { moveNear: 180, moveFar: 900, bulletSpd: 8, shootCd: 400, maxV: 40, changePct: 0.55, initVx: 28, initVy: 22 };
   } else {
     DIFF = { moveNear: 800, moveFar: 3000, bulletSpd: 3, shootCd: 900, maxV: 35, changePct: 0.35, initVx: 30, initVy: 20 };
   }
@@ -839,7 +839,7 @@ function stepAliens() {
       // Chase the player — steer velocity toward basket
       const toX = S.playerX - a.x, toY = S.playerY - a.y;
       const dist = Math.sqrt(toX*toX + toY*toY) || 1;
-      const chase = 12 + S.wave * 3;
+      const chase = 7 + S.wave * 1.5;
       a.vx += (toX / dist) * chase;
       a.vy += (toY / dist) * chase;
     } else {
