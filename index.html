@@ -342,6 +342,49 @@ body {
 #lb-table tr:nth-child(3) td { color: #cd7f32; }
 #lb-loading { color: rgba(255,255,255,0.6); font-size: clamp(16px,3vw,28px); }
 
+/* ── WAVE BANNER ── */
+#wave-banner {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0,0,10,0.9);
+  border: 3px solid #FFD700;
+  border-radius: 24px;
+  padding: 22px 44px;
+  text-align: center;
+  z-index: 50;
+  display: none;
+  color: #fff;
+  pointer-events: none;
+  box-shadow: 0 0 50px rgba(255,215,0,0.35);
+}
+#wave-banner.visible {
+  display: block;
+  animation: banner-pop 0.3s ease-out;
+}
+@keyframes banner-pop {
+  from { transform: translate(-50%,-50%) scale(0.5); opacity: 0; }
+  to   { transform: translate(-50%,-50%) scale(1);   opacity: 1; }
+}
+#wave-banner .bt { font-size: clamp(26px,6vw,58px); color: #FFD700; text-shadow: 2px 2px 0 #884400; }
+#wave-banner .bs { font-size: clamp(14px,2.8vw,26px); color: #aaffcc; margin-top: 6px; }
+
+/* ── COMBO DISPLAY ── */
+#combo-display {
+  position: absolute;
+  top: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: clamp(15px,2.8vw,26px);
+  color: #ff8800;
+  text-shadow: 0 0 14px #ff8800, 2px 2px 0 #662200;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 /* ── CONTROLS HINT ── */
 #hint {
   position: absolute;
@@ -434,9 +477,12 @@ body {
   <div id="score-display">🌟 Fed: 0</div>
   <div id="lives-display">🧺🧺🧺</div>
   <div id="mode-badge"></div>
+  <div id="combo-display"></div>
   <div id="game-area">
+  <div id="wave-banner"></div>
     <div id="player">🧺</div>
     <div id="hint">arrow keys or drag to move &nbsp;|&nbsp; SPACE or tap = throw food!</div>
+  </div>
   </div>
 </div>
 
@@ -506,6 +552,8 @@ const ROW_EMOJIS = [
 const BOOM_EMOJIS  = ['❤️','😋','🥰','😊','💛','💚','💙','🩷'];
 const FOOD_EMOJIS  = ['🍎','🥕','🐟','🌿','🍓','🥦','🍇','🌽'];
 let foodIdx = 0;
+const COMBO_WINDOW = 2500; // ms between hits to keep combo alive
+const MAX_WAVES    = 5;    // waves before win in easy/friends mode
 let gameMode = 'theo';
 let DIFF = {};
 
@@ -564,7 +612,11 @@ function initState() {
     won:       false,
     lastShot:  0,
     moveMs:    MOVE_MS_START,
-    level:     1,
+    wave:      1,
+    combo:     1,
+    comboTimer:null,
+    shotsFired:0,
+    shotsHit:  0,
   };
 }
 
@@ -604,8 +656,14 @@ function syncPlayer() {
 }
 
 function updateHUD() {
-  document.getElementById('score-display').textContent = '🌟 Fed: ' + S.score;
+  const waveStr = gameMode === 'adults' ? `Wave ${S.wave}` : `Wave ${S.wave}/${MAX_WAVES}`;
+  document.getElementById('score-display').textContent = `🌟 ${S.score}  🌊 ${waveStr}`;
   document.getElementById('lives-display').textContent = '🧺'.repeat(Math.max(0, S.lives));
+}
+function updateComboDisplay() {
+  const el = document.getElementById('combo-display');
+  if (S.combo > 1) { el.textContent = `🔥 COMBO x${S.combo}!`; el.style.opacity = '1'; }
+  else             { el.style.opacity = '0'; }
 }
 
 const ALL_SCREENS = ['tap-screen','start-screen','win-screen','lose-screen','name-screen','leaderboard-screen'];
@@ -676,6 +734,7 @@ function shoot() {
   el.style.top  = by + 'px';
   area.appendChild(el);
   S.bullets.push({ x: bx, y: by, el });
+  S.shotsFired++;
   sndShoot();
 }
 
@@ -702,7 +761,13 @@ function loop(ts) {
     b.y -= DIFF.bulletSpd;
     b.el.style.top = b.y + 'px';
 
-    if (b.y < -40) { deadBullets.push(bi); b.el.remove(); return; }
+    if (b.y < -40) {
+      // Miss — reset combo
+      deadBullets.push(bi); b.el.remove();
+      clearTimeout(S.comboTimer);
+      S.combo = 1; updateComboDisplay();
+      return;
+    }
 
     for (const a of S.aliens) {
       if (!a.alive) continue;
@@ -712,7 +777,13 @@ function loop(ts) {
         a.el.remove(); a.el = null;
         boom(a.x, a.y);
         sndHit();
-        S.score += 10;
+        S.shotsHit++;
+        S.score += 10 * S.combo;
+        // Advance combo and restart window timer
+        clearTimeout(S.comboTimer);
+        S.combo = Math.min(S.combo + 1, 8);
+        updateComboDisplay();
+        S.comboTimer = setTimeout(() => { S.combo = 1; updateComboDisplay(); }, COMBO_WINDOW);
         updateHUD();
         deadBullets.push(bi);
         b.el.remove();
@@ -722,8 +793,8 @@ function loop(ts) {
   });
   deadBullets.sort((a,b)=>b-a).forEach(i => S.bullets.splice(i,1));
 
-  // ── CHECK WIN
-  if (S.aliens.every(a => !a.alive)) { triggerWin(); return; }
+  // ── CHECK WAVE COMPLETE
+  if (S.aliens.every(a => !a.alive)) { triggerWaveComplete(); return; }
 
   // ── ALIEN MOVEMENT (speeds up as animals get close to player)
   const aliveNow = S.aliens.filter(a => a.alive);
@@ -744,7 +815,8 @@ function loop(ts) {
       return;
     }
     const ratio = Math.min(1, minDist / (S.H * 0.55));
-    S.moveMs = DIFF.moveNear + ratio * (DIFF.moveFar - DIFF.moveNear);
+    const waveScale = Math.max(0.4, 1 - (S.wave - 1) * 0.12); // 12% faster per wave, min 40%
+    S.moveMs = (DIFF.moveNear + ratio * (DIFF.moveFar - DIFF.moveNear)) * waveScale;
   }
   alienTimer += dt;
   if (alienTimer >= S.moveMs) {
@@ -763,13 +835,22 @@ function stepAliens() {
   const maxV = DIFF.maxV;
 
   alive.forEach(a => {
-    // Randomly nudge direction each step
-    if (Math.random() < DIFF.changePct) {
-      a.vx += (Math.random() * 2 - 1) * 18;
-      a.vy += (Math.random() * 2 - 1) * 14;
-      a.vx = Math.max(-maxV, Math.min(maxV, a.vx));
-      a.vy = Math.max(-maxV, Math.min(maxV, a.vy));
+    if (gameMode === 'adults') {
+      // Chase the player — steer velocity toward basket
+      const toX = S.playerX - a.x, toY = S.playerY - a.y;
+      const dist = Math.sqrt(toX*toX + toY*toY) || 1;
+      const chase = 12 + S.wave * 3;
+      a.vx += (toX / dist) * chase;
+      a.vy += (toY / dist) * chase;
+    } else {
+      // Randomly nudge direction each step
+      if (Math.random() < DIFF.changePct) {
+        a.vx += (Math.random() * 2 - 1) * 18;
+        a.vy += (Math.random() * 2 - 1) * 14;
+      }
     }
+    a.vx = Math.max(-maxV, Math.min(maxV, a.vx));
+    a.vy = Math.max(-maxV, Math.min(maxV, a.vy));
 
     a.x += a.vx;
     a.y += a.vy;
@@ -809,8 +890,21 @@ function loseLife() {
       document.getElementById('game-container').style.background = 'radial-gradient(ellipse at 50% 30%, #2a0050 0%, #0d0030 40%, #000015 100%)';
     }, 400);
 
-    // Push aliens back to top
-    resetAlienPositions();
+    // Reset player to bottom center
+    S.playerX = S.W / 2;
+    S.playerY = S.H - 70;
+    syncPlayer();
+
+    if (gameMode === 'adults') {
+      // Kill remaining aliens, pause 2s, then respawn same wave
+      cancelAnimationFrame(rafId);
+      S.aliens.forEach(a => { if (a.el) { a.el.remove(); a.el = null; } a.alive = false; });
+      S.bullets.forEach(b => b.el.remove()); S.bullets = [];
+      showWaveBanner(`<div class="bt">😤 They're coming back!</div><div class="bs">Get ready...</div>`, 2200)
+        .then(() => spawnWaveAliens(false));
+    } else {
+      resetAlienPositions();
+    }
   }
 }
 
@@ -867,6 +961,81 @@ function triggerLose() {
 }
 
 /* ══════════════════════════════════════════════
+   WAVE / COMBO HELPERS
+══════════════════════════════════════════════ */
+function showWaveBanner(html, duration) {
+  const b = document.getElementById('wave-banner');
+  b.innerHTML = html;
+  b.classList.remove('visible');
+  void b.offsetWidth;
+  b.classList.add('visible');
+  b.style.display = 'block';
+  return new Promise(resolve => setTimeout(() => { b.style.display = 'none'; resolve(); }, duration));
+}
+
+function calcAccuracyBonus() {
+  if (!S.shotsFired) return { pct: 100, bonus: 0, label: '' };
+  const pct = Math.round(S.shotsHit / S.shotsFired * 100);
+  const bonus = pct === 100 ? 200 : pct >= 90 ? 120 : pct >= 75 ? 60 : pct >= 50 ? 20 : 0;
+  return { pct, bonus, label: `${pct}% accuracy` };
+}
+
+function spawnWaveAliens(advanceWave) {
+  if (advanceWave) S.wave++;
+  // Reset per-wave stats
+  S.shotsFired = 0; S.shotsHit = 0;
+  S.combo = 1; clearTimeout(S.comboTimer); updateComboDisplay();
+  S.bullets.forEach(b => b.el.remove()); S.bullets = [];
+  S.aliens.forEach(a => { if (a.el) { a.el.remove(); a.el = null; } });
+
+  const area = document.getElementById('game-area');
+  const W = S.W, H = S.H;
+  const marginX = Math.min(W * 0.12, 60);
+  const spacing  = (W - marginX * 2) / (COLS - 1);
+  const rowH     = Math.min(70, H * 0.11);
+  const speedScale = 1 + (S.wave - 1) * 0.18;
+
+  S.aliens = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const el = document.createElement('div');
+      el.className = 'alien';
+      el.textContent = ROW_EMOJIS[r][c];
+      const x = marginX + c * spacing, y = 55 + r * rowH;
+      el.style.left = x + 'px'; el.style.top = y + 'px';
+      area.appendChild(el);
+      S.aliens.push({
+        x, y, emoji: ROW_EMOJIS[r][c], alive: true, el,
+        vx: (Math.random() * 2 - 1) * DIFF.initVx * speedScale,
+        vy: (Math.random() * 2 - 1) * DIFF.initVy * speedScale,
+      });
+    }
+  }
+  updateHUD();
+  alienTimer = 0; lastTs = performance.now();
+  rafId = requestAnimationFrame(loop);
+}
+
+async function triggerWaveComplete() {
+  cancelAnimationFrame(rafId);
+  const { pct, bonus, label } = calcAccuracyBonus();
+  if (bonus) { S.score += bonus; updateHUD(); }
+  const bonusStr = bonus ? `+${bonus} accuracy bonus!` : label || '';
+
+  await showWaveBanner(
+    `<div class="bt">🎉 Wave ${S.wave} done!</div><div class="bs">${bonusStr}</div>`, 2200
+  );
+
+  // Win condition for easy modes
+  if (gameMode !== 'adults' && S.wave >= MAX_WAVES) { triggerWin(); return; }
+
+  await showWaveBanner(
+    `<div class="bt">🌊 Wave ${S.wave + 1}${gameMode === 'adults' ? ' 💪' : ''}!</div><div class="bs">Get ready...</div>`, 1600
+  );
+  spawnWaveAliens(true);
+}
+
+/* ══════════════════════════════════════════════
    START / RESTART
 ══════════════════════════════════════════════ */
 function startGame(mode) {
@@ -897,6 +1066,7 @@ function startGame(mode) {
   makeAliens();
   syncPlayer();
   updateHUD();
+  updateComboDisplay();
   alienTimer = 0;
   lastTs = performance.now();
   rafId = requestAnimationFrame(loop);
