@@ -133,6 +133,53 @@ body {
   100% { transform: translateX(-50%) translateY(-50%) scale(1) rotate(0deg); }
 }
 
+/* ── BOSS ALIEN ── */
+.boss {
+  font-size: clamp(90px, 18vw, 150px) !important;
+  filter: drop-shadow(0 0 24px rgba(255,210,0,0.95)) drop-shadow(0 0 48px rgba(255,100,0,0.65)) !important;
+  animation: boss-float 1.8s ease-in-out infinite alternate !important;
+  z-index: 12 !important;
+}
+@keyframes boss-float {
+  from { transform: translateX(-50%) translateY(-50%) scale(1) rotate(-4deg); }
+  to   { transform: translateX(-50%) translateY(-62%) scale(1.1) rotate(4deg); }
+}
+
+/* ── BOSS FULLNESS BAR ── */
+#boss-bar-wrap {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(78vw, 480px);
+  z-index: 20;
+  display: none;
+  text-align: center;
+  pointer-events: none;
+}
+#boss-bar-label {
+  font-size: clamp(11px, 1.9vw, 17px);
+  color: #FFD700;
+  text-shadow: 1px 1px 4px #000;
+  margin-bottom: 3px;
+  white-space: nowrap;
+}
+#boss-bar-track {
+  width: 100%;
+  height: 20px;
+  background: rgba(0,0,0,0.55);
+  border: 2px solid #FFD700;
+  border-radius: 12px;
+  overflow: hidden;
+}
+#boss-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff4400, #ffbb00, #ffff44);
+  border-radius: 10px;
+  transition: width 0.35s ease;
+  width: 0%;
+}
+
 /* ── NOM EFFECT (was explosions) ── */
 .explosion {
   position: absolute;
@@ -480,6 +527,10 @@ body {
   <div id="combo-display"></div>
   <div id="game-area">
   <div id="wave-banner"></div>
+    <div id="boss-bar-wrap">
+      <div id="boss-bar-label">🦒 Giraffe Fullness: 0%</div>
+      <div id="boss-bar-track"><div id="boss-bar-fill"></div></div>
+    </div>
     <div id="player">🧺</div>
     <div id="hint">arrow keys or drag to move &nbsp;|&nbsp; SPACE or tap = throw food!</div>
   </div>
@@ -529,7 +580,9 @@ function sndWin() {
   [523,659,784,1047,1319].forEach((n,i)=>setTimeout(()=>tone(n,'sine',0.35,0.4),i*160));
   setTimeout(()=>[1568,1319,1047,784,1047,1319,1568].forEach((n,i)=>setTimeout(()=>tone(n,'triangle',0.25,0.35),i*120)),900);
 }
-function sndLose() { [380,300,240,180,130].forEach((n,i)=>setTimeout(()=>tone(n,'sawtooth',0.25,0.3),i*180)); }
+function sndLose()       { [380,300,240,180,130].forEach((n,i)=>setTimeout(()=>tone(n,'sawtooth',0.25,0.3),i*180)); }
+function sndBossHit()    { tone(330,'triangle',0.06,0.22,600); setTimeout(()=>tone(660,'sine',0.1,0.22,1000),75); }
+function sndBossDefeat() { [262,330,392,523,659,784,1047,1319].forEach((n,i)=>setTimeout(()=>tone(n,'sine',0.28,0.45),i*110)); }
 
 /* ══════════════════════════════════════════════
    CONSTANTS
@@ -552,8 +605,11 @@ const ROW_EMOJIS = [
 const BOOM_EMOJIS  = ['❤️','😋','🥰','😊','💛','💚','💙','🩷'];
 const FOOD_EMOJIS  = ['🍎','🥕','🐟','🌿','🍓','🥦','🍇','🌽'];
 let foodIdx = 0;
-const COMBO_WINDOW = 2500; // ms between hits to keep combo alive
-const MAX_WAVES    = 5;    // waves before win in easy/friends mode
+const COMBO_WINDOW  = 2500; // ms between hits to keep combo alive
+const MAX_WAVES     = 5;    // waves before win in easy/friends mode
+const BOSS_WAVE     = 3;    // boss spawns after completing this wave
+const BOSS_HP_EASY  = 10;   // hits needed in easy/friends mode
+const BOSS_HP_HARD  = 16;   // hits needed in adults mode
 let gameMode = 'theo';
 let DIFF = {};
 
@@ -615,8 +671,11 @@ function initState() {
     wave:      1,
     combo:     1,
     comboTimer:null,
-    shotsFired:0,
-    shotsHit:  0,
+    shotsFired: 0,
+    shotsHit:   0,
+    isBossWave: false,
+    bossHp:     0,
+    bossMaxHp:  0,
   };
 }
 
@@ -656,7 +715,12 @@ function syncPlayer() {
 }
 
 function updateHUD() {
-  const waveStr = gameMode === 'adults' ? `Wave ${S.wave}` : `Wave ${S.wave}/${MAX_WAVES}`;
+  let waveStr;
+  if (S.isBossWave) {
+    waveStr = '🦒 BOSS!';
+  } else {
+    waveStr = gameMode === 'adults' ? `Wave ${S.wave}` : `Wave ${S.wave}/${MAX_WAVES}`;
+  }
   document.getElementById('score-display').textContent = `🌟 ${S.score}  🌊 ${waveStr}`;
   document.getElementById('lives-display').textContent = '🧺'.repeat(Math.max(0, S.lives));
 }
@@ -771,22 +835,34 @@ function loop(ts) {
 
     for (const a of S.aliens) {
       if (!a.alive) continue;
-      if (Math.abs(b.x - a.x) < 38 && Math.abs(b.y - a.y) < 38) {
+      const hr = a.isBoss ? 65 : 38;
+      if (Math.abs(b.x - a.x) < hr && Math.abs(b.y - a.y) < hr) {
         // HIT!
-        a.alive = false;
-        a.el.remove(); a.el = null;
         boom(a.x, a.y);
-        sndHit();
         S.shotsHit++;
-        S.score += 10 * S.combo;
-        // Advance combo and restart window timer
         clearTimeout(S.comboTimer);
         S.combo = Math.min(S.combo + 1, 8);
         updateComboDisplay();
         S.comboTimer = setTimeout(() => { S.combo = 1; updateComboDisplay(); }, COMBO_WINDOW);
-        updateHUD();
         deadBullets.push(bi);
         b.el.remove();
+        if (a.isBoss) {
+          sndBossHit();
+          S.bossHp--;
+          S.score += 20 * S.combo;
+          updateBossBar();
+          if (S.bossHp <= 0) {
+            a.alive = false;
+            a.el.remove(); a.el = null;
+            sndBossDefeat();
+          }
+        } else {
+          sndHit();
+          a.alive = false;
+          a.el.remove(); a.el = null;
+          S.score += 10 * S.combo;
+        }
+        updateHUD();
         break;
       }
     }
@@ -805,12 +881,14 @@ function loop(ts) {
       const dx = a.x - S.playerX, dy = a.y - S.playerY;
       const d = Math.sqrt(dx*dx + dy*dy);
       if (d < minDist) minDist = d;
-      if (d < 70) touched = a;
+      if (d < (a.isBoss ? 100 : 70)) touched = a;
     }
-    // Animal reached the basket — it escapes
+    // Animal reached the basket — it escapes (boss doesn't die from touching, only from being fed)
     if (touched) {
-      touched.alive = false;
-      if (touched.el) { touched.el.remove(); touched.el = null; }
+      if (!touched.isBoss) {
+        touched.alive = false;
+        if (touched.el) { touched.el.remove(); touched.el = null; }
+      }
       loseLife();
       return;
     }
@@ -835,7 +913,20 @@ function stepAliens() {
   const maxV = DIFF.maxV;
 
   alive.forEach(a => {
-    if (gameMode === 'adults') {
+    if (a.isBoss) {
+      // Boss moves slower in easy, chases gently in adults
+      if (gameMode === 'adults') {
+        const toX = S.playerX - a.x, toY = S.playerY - a.y;
+        const dist = Math.sqrt(toX*toX + toY*toY) || 1;
+        a.vx += (toX / dist) * (4 + S.wave * 0.8);
+        a.vy += (toY / dist) * (4 + S.wave * 0.8);
+      } else {
+        if (Math.random() < 0.45) {
+          a.vx += (Math.random() * 2 - 1) * 14;
+          a.vy += (Math.random() * 2 - 1) * 10;
+        }
+      }
+    } else if (gameMode === 'adults') {
       // Chase the player — steer velocity toward basket
       const toX = S.playerX - a.x, toY = S.playerY - a.y;
       const dist = Math.sqrt(toX*toX + toY*toY) || 1;
@@ -864,9 +955,9 @@ function stepAliens() {
 
   syncAliens();
 
-  // Hop animation
+  // Hop animation (skip boss — it has its own float animation)
   alive.forEach(a => {
-    if (!a.el) return;
+    if (!a.el || a.isBoss) return;
     a.el.classList.remove('hop');
     void a.el.offsetWidth;
     a.el.classList.add('hop');
@@ -896,12 +987,25 @@ function loseLife() {
     syncPlayer();
 
     if (gameMode === 'adults') {
-      // Kill remaining aliens, pause 2s, then respawn same wave
+      // Kill remaining aliens, pause 2s, then respawn same wave (or boss)
       cancelAnimationFrame(rafId);
       S.aliens.forEach(a => { if (a.el) { a.el.remove(); a.el = null; } a.alive = false; });
       S.bullets.forEach(b => b.el.remove()); S.bullets = [];
-      showWaveBanner(`<div class="bt">😤 They're coming back!</div><div class="bs">Get ready...</div>`, 2200)
-        .then(() => spawnWaveAliens(false));
+      const wasBoss = S.isBossWave;
+      S.isBossWave = false;
+      hideBossBar();
+      const msg = wasBoss ? '🦒 The giraffe is back!' : '😤 They\'re coming back!';
+      showWaveBanner(`<div class="bt">${msg}</div><div class="bs">Get ready...</div>`, 2200)
+        .then(() => wasBoss ? spawnBossWave() : spawnWaveAliens(false));
+    } else if (S.isBossWave) {
+      // Easy mode boss wave: pause, then respawn boss at full HP
+      cancelAnimationFrame(rafId);
+      S.aliens.forEach(a => { if (a.el) { a.el.remove(); a.el = null; } });
+      S.bullets.forEach(b => b.el.remove()); S.bullets = [];
+      S.isBossWave = false;
+      hideBossBar();
+      showWaveBanner(`<div class="bt">🦒 The giraffe is hungry again!</div><div class="bs">Get ready...</div>`, 2200)
+        .then(() => spawnBossWave());
     } else {
       resetAlienPositions();
     }
@@ -982,6 +1086,8 @@ function calcAccuracyBonus() {
 
 function spawnWaveAliens(advanceWave) {
   if (advanceWave) S.wave++;
+  S.isBossWave = false;
+  hideBossBar();
   // Reset per-wave stats
   S.shotsFired = 0; S.shotsHit = 0;
   S.combo = 1; clearTimeout(S.comboTimer); updateComboDisplay();
@@ -1018,6 +1124,25 @@ function spawnWaveAliens(advanceWave) {
 
 async function triggerWaveComplete() {
   cancelAnimationFrame(rafId);
+
+  // ── Boss defeated path
+  if (S.isBossWave) {
+    S.isBossWave = false;
+    hideBossBar();
+    S.score += 300;
+    updateHUD();
+    sndBossDefeat();
+    await showWaveBanner(
+      `<div class="bt">🦒 BOSS DEFEATED! 🎉</div><div class="bs">+300 boss bonus!</div>`, 2800
+    );
+    if (gameMode !== 'adults' && S.wave >= MAX_WAVES) { triggerWin(); return; }
+    await showWaveBanner(
+      `<div class="bt">🌊 Wave ${S.wave + 1}${gameMode === 'adults' ? ' 💪' : ''}!</div><div class="bs">Get ready...</div>`, 1600
+    );
+    spawnWaveAliens(true);
+    return;
+  }
+
   const { pct, bonus, label } = calcAccuracyBonus();
   if (bonus) { S.score += bonus; updateHUD(); }
   const bonusStr = bonus ? `+${bonus} accuracy bonus!` : label || '';
@@ -1029,10 +1154,66 @@ async function triggerWaveComplete() {
   // Win condition for easy modes
   if (gameMode !== 'adults' && S.wave >= MAX_WAVES) { triggerWin(); return; }
 
+  // Boss wave trigger after BOSS_WAVE
+  if (S.wave === BOSS_WAVE) {
+    await showWaveBanner(
+      `<div class="bt">🦒 BOSS INCOMING!</div><div class="bs">Feed the giraffe until he's FULL!</div>`, 2800
+    );
+    spawnBossWave();
+    return;
+  }
+
   await showWaveBanner(
     `<div class="bt">🌊 Wave ${S.wave + 1}${gameMode === 'adults' ? ' 💪' : ''}!</div><div class="bs">Get ready...</div>`, 1600
   );
   spawnWaveAliens(true);
+}
+
+/* ══════════════════════════════════════════════
+   BOSS HELPERS
+══════════════════════════════════════════════ */
+function showBossBar() { document.getElementById('boss-bar-wrap').style.display = 'block'; updateBossBar(); }
+function hideBossBar() { document.getElementById('boss-bar-wrap').style.display = 'none'; }
+function updateBossBar() {
+  const pct = Math.round((1 - S.bossHp / S.bossMaxHp) * 100);
+  document.getElementById('boss-bar-fill').style.width = pct + '%';
+  const label = pct < 25 ? 'Ravenous!' : pct < 50 ? 'Still hungry...' : pct < 75 ? 'Getting full!' : pct < 100 ? 'Almost full!' : 'STUFFED!';
+  document.getElementById('boss-bar-label').textContent = `🦒 ${label} (${pct}% full)`;
+}
+
+function spawnBossWave() {
+  S.isBossWave = true;
+  S.bossMaxHp  = (gameMode === 'adults') ? BOSS_HP_HARD : BOSS_HP_EASY;
+  S.bossHp     = S.bossMaxHp;
+  S.shotsFired = 0; S.shotsHit = 0;
+  S.combo = 1; clearTimeout(S.comboTimer); updateComboDisplay();
+  S.bullets.forEach(b => b.el.remove()); S.bullets = [];
+  S.aliens.forEach(a => { if (a.el) { a.el.remove(); a.el = null; } });
+
+  const area = document.getElementById('game-area');
+  const x = S.W / 2, y = S.H * 0.22;
+  const el = document.createElement('div');
+  el.className = 'alien boss';
+  el.textContent = '🦒';
+  el.style.left = x + 'px';
+  el.style.top  = y + 'px';
+  area.appendChild(el);
+
+  const speedMult = gameMode === 'adults' ? 1.4 : 0.6;
+  S.aliens = [{
+    x, y,
+    emoji: '🦒',
+    alive: true,
+    el,
+    isBoss: true,
+    vx: (Math.random() * 2 - 1) * DIFF.initVx * speedMult,
+    vy: (Math.random() * 2 - 1) * DIFF.initVy * speedMult,
+  }];
+
+  showBossBar();
+  updateHUD();
+  alienTimer = 0; lastTs = performance.now();
+  rafId = requestAnimationFrame(loop);
 }
 
 /* ══════════════════════════════════════════════
@@ -1059,6 +1240,7 @@ function startGame(mode) {
   }
 
   cancelAnimationFrame(rafId);
+  hideBossBar();
   showScreen(null);
   clearArea();
   makeStars();
