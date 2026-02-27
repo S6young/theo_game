@@ -90,6 +90,38 @@ body {
   left: 0; right: 0; bottom: 0;
 }
 
+/* ── WAVE TIMER ── */
+#timer-bar-wrap {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 7px;
+  z-index: 14;
+  pointer-events: none;
+}
+#timer-bar-fill {
+  height: 100%;
+  width: 100%;
+  background: #44ff88;
+  transition: background-color 0.4s;
+}
+#timer-num {
+  position: absolute;
+  top: 9px;
+  left: 16px;
+  font-size: clamp(13px, 2.1vw, 19px);
+  color: #aaffcc;
+  text-shadow: 1px 1px 4px #000, 0 0 8px rgba(68,255,136,0.5);
+  z-index: 14;
+  pointer-events: none;
+  transition: color 0.3s;
+}
+#timer-num.warn  { color: #ffdd44; text-shadow: 1px 1px 4px #000, 0 0 8px rgba(255,220,0,0.7); }
+#timer-num.urgent{ color: #ff4444; text-shadow: 1px 1px 4px #000, 0 0 10px rgba(255,60,0,0.8); animation: timer-pulse 0.5s ease-in-out infinite alternate; }
+@keyframes timer-pulse {
+  from { transform: scale(1); }
+  to   { transform: scale(1.18); }
+}
+
 /* ── PLAYER ── */
 #player {
   position: absolute;
@@ -527,6 +559,8 @@ body {
   <div id="combo-display"></div>
   <div id="game-area">
   <div id="wave-banner"></div>
+    <div id="timer-bar-wrap"><div id="timer-bar-fill"></div></div>
+    <div id="timer-num">⏱️ 90</div>
     <div id="boss-bar-wrap">
       <div id="boss-bar-label">🦒 Giraffe Fullness: 0%</div>
       <div id="boss-bar-track"><div id="boss-bar-fill"></div></div>
@@ -610,6 +644,12 @@ const MAX_WAVES     = 5;    // waves before win in easy/friends mode
 const BOSS_WAVE     = 3;    // boss spawns after completing this wave
 const BOSS_HP_EASY  = 10;   // hits needed in easy/friends mode
 const BOSS_HP_HARD  = 16;   // hits needed in adults mode
+const TIME_BASE_EASY   = 90;  // seconds per wave (easy/friends)
+const TIME_BASE_ADULTS = 60;  // seconds per wave (adults)
+const TIME_DECAY       = 5;   // seconds less per wave
+const TIME_MIN         = 30;  // minimum seconds allowed
+const TIME_BOSS_EASY   = 120; // seconds for boss wave (easy)
+const TIME_BOSS_ADULTS = 80;  // seconds for boss wave (adults)
 let gameMode = 'theo';
 let DIFF = {};
 
@@ -673,9 +713,11 @@ function initState() {
     comboTimer:null,
     shotsFired: 0,
     shotsHit:   0,
-    isBossWave: false,
-    bossHp:     0,
-    bossMaxHp:  0,
+    isBossWave:    false,
+    bossHp:        0,
+    bossMaxHp:     0,
+    waveStartTime: performance.now(),
+    waveTimeLimit: gameMode === 'adults' ? TIME_BASE_ADULTS : TIME_BASE_EASY,
   };
 }
 
@@ -723,6 +765,31 @@ function updateHUD() {
   }
   document.getElementById('score-display').textContent = `🌟 ${S.score}  🌊 ${waveStr}`;
   document.getElementById('lives-display').textContent = '🧺'.repeat(Math.max(0, S.lives));
+}
+function getWaveTimeLimit(isBoss) {
+  if (isBoss) return gameMode === 'adults' ? TIME_BOSS_ADULTS : TIME_BOSS_EASY;
+  const base = gameMode === 'adults' ? TIME_BASE_ADULTS : TIME_BASE_EASY;
+  return Math.max(TIME_MIN, base - (S.wave - 1) * TIME_DECAY);
+}
+function updateTimerDisplay() {
+  const elapsed   = (performance.now() - S.waveStartTime) / 1000;
+  const remaining = Math.max(0, S.waveTimeLimit - elapsed);
+  const pct       = remaining / S.waveTimeLimit * 100;
+  const fill = document.getElementById('timer-bar-fill');
+  const num  = document.getElementById('timer-num');
+  fill.style.width = pct + '%';
+  if (pct > 50)      { fill.style.background = '#44ff88'; num.className = ''; }
+  else if (pct > 25) { fill.style.background = '#ffdd44'; num.className = 'warn'; }
+  else               { fill.style.background = '#ff4444'; num.className = 'urgent'; }
+  num.textContent = `⏱️ ${Math.ceil(remaining)}s`;
+}
+function calcTimeBonus() {
+  const elapsed    = (performance.now() - S.waveStartTime) / 1000;
+  const remaining  = Math.max(0, S.waveTimeLimit - elapsed);
+  if (remaining <= 0) return { bonus: 0, secs: 0 };
+  const rate  = S.isBossWave ? 2 : (gameMode === 'adults' ? 5 : 3);
+  const bonus = Math.floor(remaining) * rate;
+  return { bonus, secs: Math.floor(remaining) };
 }
 function updateComboDisplay() {
   const el = document.getElementById('combo-display');
@@ -809,6 +876,9 @@ function loop(ts) {
   if (S.gameOver || S.won) return;
   const dt = Math.min(ts - lastTs, 50); // cap dt so tabbing away doesn't cause issues
   lastTs = ts;
+
+  // ── TIMER
+  updateTimerDisplay();
 
   // ── PLAYER KEYBOARD MOVEMENT
   if (keys['ArrowLeft']  || keys['a'] || keys['A']) S.playerX -= PLAYER_SPD;
@@ -1117,6 +1187,8 @@ function spawnWaveAliens(advanceWave) {
       });
     }
   }
+  S.waveTimeLimit = getWaveTimeLimit(false);
+  S.waveStartTime = performance.now();
   updateHUD();
   alienTimer = 0; lastTs = performance.now();
   rafId = requestAnimationFrame(loop);
@@ -1127,13 +1199,16 @@ async function triggerWaveComplete() {
 
   // ── Boss defeated path
   if (S.isBossWave) {
+    const { bonus: tBonus, secs } = calcTimeBonus();
     S.isBossWave = false;
     hideBossBar();
-    S.score += 300;
+    S.score += 300 + tBonus;
     updateHUD();
     sndBossDefeat();
+    const bParts = ['+300 boss bonus!'];
+    if (tBonus > 0) bParts.push(`+${tBonus} speed bonus! (${secs}s left)`);
     await showWaveBanner(
-      `<div class="bt">🦒 BOSS DEFEATED! 🎉</div><div class="bs">+300 boss bonus!</div>`, 2800
+      `<div class="bt">🦒 BOSS DEFEATED! 🎉</div><div class="bs">${bParts.join('  ')}</div>`, 2800
     );
     if (gameMode !== 'adults' && S.wave >= MAX_WAVES) { triggerWin(); return; }
     await showWaveBanner(
@@ -1144,8 +1219,14 @@ async function triggerWaveComplete() {
   }
 
   const { pct, bonus, label } = calcAccuracyBonus();
-  if (bonus) { S.score += bonus; updateHUD(); }
-  const bonusStr = bonus ? `+${bonus} accuracy bonus!` : label || '';
+  const { bonus: tBonus, secs } = calcTimeBonus();
+  if (bonus)  { S.score += bonus;  updateHUD(); }
+  if (tBonus) { S.score += tBonus; updateHUD(); }
+  const parts = [];
+  if (bonus)       parts.push(`+${bonus} accuracy!`);
+  else if (label)  parts.push(label);
+  if (tBonus > 0)  parts.push(`+${tBonus} speed bonus! (${secs}s left)`);
+  const bonusStr = parts.join('  ');
 
   await showWaveBanner(
     `<div class="bt">🎉 Wave ${S.wave} done!</div><div class="bs">${bonusStr}</div>`, 2200
@@ -1210,6 +1291,8 @@ function spawnBossWave() {
     vy: (Math.random() * 2 - 1) * DIFF.initVy * speedMult,
   }];
 
+  S.waveTimeLimit = getWaveTimeLimit(true);
+  S.waveStartTime = performance.now();
   showBossBar();
   updateHUD();
   alienTimer = 0; lastTs = performance.now();
