@@ -706,10 +706,9 @@ const STREAK_WINDOW       = 6000;  // ms between hits to maintain a rapid streak
 const STREAK_THRESHOLD    = 5;     // hits in a row to earn one multi-feed charge
 const MULTI_FEED_MAX      = 3;     // max multi-feed charges held at once
 const MULTI_FOOD_EMOJI    = '🍕';  // emoji for multi-feed bullets
-const TIME_BASE_EASY   = 45;  // seconds per wave (easy/friends)
-const TIME_BASE_ADULTS = 30;  // seconds per wave (adults)
-const TIME_DECAY       = 5;   // seconds less per wave
-const TIME_MIN         = 30;  // minimum seconds allowed
+const TIME_BASE_EASY   = 15;  // seconds for wave 1 (easy/friends)
+const TIME_BASE_ADULTS = 15;  // seconds for wave 1 (adults)
+const TIME_GROW        = 7;   // extra seconds added per wave
 const TIME_BOSS_EASY   = 120; // seconds for boss wave (easy)
 const TIME_BOSS_ADULTS = 80;  // seconds for boss wave (adults)
 let gameMode = 'theo';
@@ -839,7 +838,7 @@ function updateHUD() {
 function getWaveTimeLimit(isBoss) {
   if (isBoss) return gameMode === 'adults' ? TIME_BOSS_ADULTS : TIME_BOSS_EASY;
   const base = gameMode === 'adults' ? TIME_BASE_ADULTS : TIME_BASE_EASY;
-  return Math.max(TIME_MIN, base - (S.wave - 1) * TIME_DECAY);
+  return base + (S.wave - 1) * TIME_GROW;
 }
 function updateTimerDisplay() {
   const elapsed   = (performance.now() - S.waveStartTime) / 1000;
