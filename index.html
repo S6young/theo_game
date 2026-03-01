@@ -854,7 +854,7 @@ function calcTimeBonus() {
   const elapsed    = (performance.now() - S.waveStartTime) / 1000;
   const remaining  = Math.max(0, S.waveTimeLimit - elapsed);
   if (remaining <= 0) return { bonus: 0, secs: 0 };
-  const rate  = S.isBossWave ? 2 : (gameMode === 'adults' ? 5 : 3);
+  const rate  = S.isBossWave ? 4 : (gameMode === 'adults' ? 10 : 6);
   const bonus = Math.floor(remaining) * rate;
   return { bonus, secs: Math.floor(remaining) };
 }
