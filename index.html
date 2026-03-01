@@ -529,6 +529,56 @@ body {
   25%  { opacity: 1; transform: translateX(-50%) translateY(-8px)  scale(1);   }
   100% { opacity: 0; transform: translateX(-50%) translateY(-55px) scale(0.85); }
 }
+
+/* ── SECRET POWER BUTTON ── */
+#power-btn {
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  background: linear-gradient(135deg, #2a0060, #6600cc);
+  border: 3px solid #cc88ff;
+  border-radius: 20px;
+  padding: 16px 28px;
+  font-size: clamp(16px, 3.8vw, 28px);
+  color: #fff;
+  text-shadow: 0 0 10px #cc88ff;
+  z-index: 20;
+  cursor: pointer;
+  white-space: nowrap;
+  animation: power-pulse 0.65s ease-in-out infinite alternate;
+  min-width: 200px;
+  text-align: center;
+  -webkit-tap-highlight-color: transparent;
+}
+@keyframes power-pulse {
+  from { box-shadow: 0 0 18px rgba(160,60,255,0.7); transform: translateX(-50%) scale(1);    }
+  to   { box-shadow: 0 0 40px rgba(200,100,255,1);  transform: translateX(-50%) scale(1.06); }
+}
+
+/* ── MEGA-FEED DISPLAY ── */
+#megafeed-display {
+  position: absolute;
+  top: 112px;
+  left: 16px;
+  font-size: clamp(12px, 2.1vw, 19px);
+  color: #ff44ff;
+  text-shadow: 0 0 12px #cc00cc, 2px 2px 0 #440044;
+  z-index: 10;
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+#megafeed-display.charged { animation: multifeed-pulse 0.6s ease-in-out infinite alternate; }
+
+/* ── MEGA-FEED BULLET ── */
+.bullet.mega {
+  filter: drop-shadow(0 0 16px rgba(255,60,255,1)) drop-shadow(0 0 30px rgba(200,0,200,0.9)) !important;
+  animation: food-spin 0.45s linear infinite !important;
+  font-size: clamp(34px, 6vw, 52px) !important;
+}
 </style>
 </head>
 <body>
@@ -611,6 +661,7 @@ body {
   <div id="mode-badge"></div>
   <div id="combo-display"></div>
   <div id="multifeed-display"></div>
+  <div id="megafeed-display"></div>
   <div id="game-area">
   <div id="wave-banner"></div>
     <div id="timer-bar-wrap"><div id="timer-bar-fill"></div></div>
@@ -620,6 +671,7 @@ body {
       <div id="boss-bar-track"><div id="boss-bar-fill"></div></div>
     </div>
     <div id="player">🧺</div>
+    <div id="power-btn" onclick="activatePower()"></div>
     <div id="hint">arrow keys or drag to move &nbsp;|&nbsp; SPACE or tap = throw food!</div>
   </div>
   </div>
@@ -787,6 +839,15 @@ function initState() {
     livesLostThisWave: 0,
     waveStartTime: performance.now(),
     waveTimeLimit: gameMode === 'adults' ? TIME_BASE_ADULTS : TIME_BASE_EASY,
+    sameAnimalStreak: 0,
+    lastFedEmoji:     null,
+    storedPower:      null,
+    shieldCharges:    0,
+    frenzying:        false,
+    frenzyTimer:      null,
+    slowed:           false,
+    slowTimer:        null,
+    megaFeedCharge:   0,
   };
 }
 
@@ -879,6 +940,70 @@ function updateMultiFeedDisplay() {
     if (player) player.style.filter = 'drop-shadow(0 0 12px rgba(100,220,255,0.9))';
   }
 }
+function updateMegaFeedDisplay() {
+  const el = document.getElementById('megafeed-display');
+  if (S.megaFeedCharge > 0) {
+    el.textContent = `🚀 MEGA FEED ${'⚡'.repeat(S.megaFeedCharge)}`;
+    el.style.opacity = '1';
+    el.classList.add('charged');
+  } else {
+    el.style.opacity = '0';
+    el.classList.remove('charged');
+  }
+}
+
+const POWER_DEFS = {
+  shield: { emoji: '🛡️', label: 'SHELL SHIELD', color: '#44ffaa', border: '#00cc66' },
+  frenzy: { emoji: '🐟', label: 'FISH FRENZY',  color: '#44aaff', border: '#0066ff' },
+  slow:   { emoji: '🦑', label: 'INK SLOW',     color: '#dd88ff', border: '#9933ff' },
+};
+
+function awardPower(type) {
+  if (S.storedPower) return;
+  S.storedPower = type;
+  const def = POWER_DEFS[type];
+  const btn = document.getElementById('power-btn');
+  btn.textContent = `${def.emoji} TAP: ${def.label}!`;
+  btn.style.borderColor = def.border;
+  btn.style.textShadow  = `0 0 12px ${def.color}`;
+  btn.style.display = 'block';
+  showGameToast(`${def.emoji} ${def.label} CHARGED! TAP BUTTON!`, def.color);
+  sndStreak();
+}
+
+function clearPowerBtn() {
+  S.storedPower = null;
+  document.getElementById('power-btn').style.display = 'none';
+}
+
+function activatePower() {
+  if (!S.storedPower || S.gameOver || S.won) return;
+  const type = S.storedPower;
+  const def = POWER_DEFS[type];
+  clearPowerBtn();
+  sndStreak();
+  if (type === 'shield') {
+    S.shieldCharges = 3;
+    showGameToast('🛡️ SHELL SHIELD! Next 3 mistakes blocked!', '#44ffaa');
+  } else if (type === 'frenzy') {
+    S.frenzying = true;
+    clearTimeout(S.frenzyTimer);
+    showGameToast('🐟 FISH FRENZY! 2× points for 15s!', '#44aaff');
+    S.frenzyTimer = setTimeout(() => {
+      S.frenzying = false;
+      showGameToast('🐟 Fish Frenzy ended', '#4488ff');
+    }, 15000);
+  } else if (type === 'slow') {
+    S.slowed = true;
+    clearTimeout(S.slowTimer);
+    showGameToast('🦑 INK SLOW! Animals slowed for 10s!', '#dd88ff');
+    S.slowTimer = setTimeout(() => {
+      S.slowed = false;
+      showGameToast('🦑 Ink Slow ended', '#aa66cc');
+    }, 10000);
+  }
+}
+
 function showGameToast(msg, color) {
   const el = document.createElement('div');
   el.style.cssText = `position:absolute;top:125px;left:50%;transform:translateX(-50%);font-size:clamp(15px,2.8vw,26px);color:${color||'#ff44ff'};text-shadow:0 0 14px currentColor;z-index:15;pointer-events:none;white-space:nowrap;font-family:inherit;animation:toast-rise 1.8s ease-out forwards;`;
@@ -956,6 +1081,27 @@ function shoot() {
   S.lastShot = now;
 
   const area = document.getElementById('game-area');
+
+  // ── MEGA-FEED: fire 5 spread bullets (unlocked after wave 3 on high streak)
+  if (S.megaFeedCharge > 0) {
+    S.megaFeedCharge--;
+    updateMegaFeedDisplay();
+    sndMultiFeed();
+    const megaOffsets = [-110, -55, 0, 55, 110];
+    megaOffsets.forEach(offset => {
+      const mel = document.createElement('div');
+      mel.className = 'bullet mega';
+      mel.textContent = '🚀';
+      const bx = Math.max(20, Math.min(S.W - 20, S.playerX + offset));
+      const by = S.playerY - 30;
+      mel.style.left = bx + 'px';
+      mel.style.top  = by + 'px';
+      area.appendChild(mel);
+      S.bullets.push({ x: bx, y: by, el: mel, isMulti: true });
+    });
+    S.shotsFired += 5;
+    return;
+  }
 
   // ── MULTI-FEED: fire 3 spread bullets
   if (S.multiFeedCharge > 0) {
@@ -1076,6 +1222,12 @@ function loop(ts) {
           updateMultiFeedDisplay();
           showGameToast('🍕 MULTI-FEED READY!', '#ffdd44');
         }
+        // Mega-feed: after wave 3, a higher streak unlocks a 5× blast
+        if (S.wave > 3 && S.streak > 0 && S.streak % 8 === 0 && S.megaFeedCharge < 2) {
+          S.megaFeedCharge++;
+          updateMegaFeedDisplay();
+          showGameToast('🚀 MEGA FEED READY! 5 at once!', '#ff44ff');
+        }
 
         deadBullets.push(bi);
         b.el.remove();
@@ -1108,12 +1260,30 @@ function loop(ts) {
           sndHit();
           a.alive = false;
           if (a.el) { a.el.remove(); a.el = null; }
-          S.score += 15 * S.combo;
+          S.score += 15 * S.combo * (S.frenzying ? 2 : 1);
         } else {
           sndHit();
+          const fedEmoji = a.emoji;
           a.alive = false;
           a.el.remove(); a.el = null;
-          S.score += 10 * S.combo;
+          S.score += 10 * S.combo * (S.frenzying ? 2 : 1);
+          // ── Same-animal streak → secret power
+          if (fedEmoji === S.lastFedEmoji) {
+            S.sameAnimalStreak++;
+          } else {
+            S.sameAnimalStreak = 1;
+            S.lastFedEmoji = fedEmoji;
+          }
+          if (S.sameAnimalStreak >= 5 && !S.storedPower) {
+            if (fedEmoji === '🐢') {
+              awardPower('shield');
+            } else if (['🐟','🐠','🐡'].includes(fedEmoji)) {
+              awardPower('frenzy');
+            } else if (['🦑','🐙'].includes(fedEmoji)) {
+              awardPower('slow');
+            }
+            S.sameAnimalStreak = 0;
+          }
         }
         updateHUD();
         break;
@@ -1147,7 +1317,7 @@ function loop(ts) {
     }
     const ratio = Math.min(1, minDist / (S.H * 0.55));
     const waveScale = Math.max(0.4, 1 - (S.wave - 1) * 0.12); // 12% faster per wave, min 40%
-    S.moveMs = (DIFF.moveNear + ratio * (DIFF.moveFar - DIFF.moveNear)) * waveScale;
+    S.moveMs = (DIFF.moveNear + ratio * (DIFF.moveFar - DIFF.moveNear)) * waveScale * (S.slowed ? 2.5 : 1);
   }
   alienTimer += dt;
   if (alienTimer >= S.moveMs) {
@@ -1234,10 +1404,19 @@ function stepAliens() {
    LIFE LOST / WIN / LOSE
 ══════════════════════════════════════════════ */
 function loseLife() {
+  if (S.shieldCharges > 0) {
+    S.shieldCharges--;
+    const left = S.shieldCharges > 0 ? ` ${S.shieldCharges} left` : ' gone';
+    showGameToast(`🛡️ SHIELD BLOCKED!${left}`, '#44ffaa');
+    sndStreak();
+    return;
+  }
   S.lives--;
   S.livesLostThisWave++;
   S.streak = 0; S.streakLastHit = 0;
   S.multiFeedCharge = 0; updateMultiFeedDisplay();
+  S.megaFeedCharge = 0; updateMegaFeedDisplay();
+  S.sameAnimalStreak = 0; S.lastFedEmoji = null;
   S.feedStreak = 0;
   updateHUD();
   sndLifeLost();
@@ -1363,6 +1542,8 @@ function spawnWaveAliens(advanceWave) {
   S.combo = 1; clearTimeout(S.comboTimer); updateComboDisplay();
   S.streak = 0; S.streakLastHit = 0;
   S.multiFeedCharge = 0; updateMultiFeedDisplay();
+  S.megaFeedCharge = 0; updateMegaFeedDisplay();
+  S.sameAnimalStreak = 0; S.lastFedEmoji = null;
   S.livesLostThisWave = 0;
   S.bullets.forEach(b => b.el.remove()); S.bullets = [];
   S.aliens.forEach(a => { if (a.el) { a.el.remove(); a.el = null; } });
@@ -1401,7 +1582,7 @@ async function triggerWaveComplete() {
   cancelAnimationFrame(rafId);
 
   // ── No-death bonus helper
-  const noDeathBonus = S.livesLostThisWave === 0 && S.wave > 1
+  const noDeathBonus = S.livesLostThisWave === 0
     ? (S.isBossWave ? (gameMode === 'adults' ? 1000 : 600) : (gameMode === 'adults' ? 400 : 200))
     : 0;
 
@@ -1417,7 +1598,7 @@ async function triggerWaveComplete() {
     if (tBonus > 0)      bParts.push(`+${tBonus} speed bonus! (${secs}s left)`);
     if (noDeathBonus > 0) bParts.push(`+${noDeathBonus} flawless!`);
     await showWaveBanner(
-      `<div class="bt">🦒 BOSS DEFEATED! 🎉</div><div class="bs">${bParts.join('  ')}</div>`, 2800
+      `<div class="bt">🦒 BOSS FED! 🎉</div><div class="bs">${bParts.join('  ')}</div>`, 2800
     );
     if (gameMode !== 'adults' && S.wave >= MAX_WAVES) { triggerWin(); return; }
     await showWaveBanner(
@@ -1527,6 +1708,8 @@ function spawnBossWave() {
   S.combo = 1; clearTimeout(S.comboTimer); updateComboDisplay();
   S.streak = 0; S.streakLastHit = 0;
   S.multiFeedCharge = 0; updateMultiFeedDisplay();
+  S.megaFeedCharge = 0; updateMegaFeedDisplay();
+  S.sameAnimalStreak = 0; S.lastFedEmoji = null;
   S.livesLostThisWave = 0;
   S.bullets.forEach(b => b.el.remove()); S.bullets = [];
   S.aliens.forEach(a => { if (a.el) { a.el.remove(); a.el = null; } });
