@@ -703,12 +703,12 @@ const BOSS_HP_EASY  = 15;   // hits needed in easy/friends mode
 const BOSS_HP_HARD  = 30;   // hits needed in adults mode
 const BOSS_PHASE2_PCT     = 0.5;   // HP fraction at which boss enrages in adults mode
 const STREAK_WINDOW       = 6000;  // ms between hits to maintain a rapid streak
-const STREAK_THRESHOLD    = 4;     // hits in a row to earn one multi-feed charge
+const STREAK_THRESHOLD    = 3;     // hits in a row to earn one multi-feed charge
 const MULTI_FEED_MAX      = 3;     // max multi-feed charges held at once
 const MULTI_FOOD_EMOJI    = '🍕';  // emoji for multi-feed bullets
 const TIME_BASE_EASY   = 15;  // seconds for wave 1 (easy/friends)
 const TIME_BASE_ADULTS = 15;  // seconds for wave 1 (adults)
-const TIME_GROW        = 7;   // extra seconds added per wave
+const TIME_GROW        = 12;  // extra seconds added per wave
 const TIME_BOSS_EASY   = 120; // seconds for boss wave (easy)
 const TIME_BOSS_ADULTS = 80;  // seconds for boss wave (adults)
 let gameMode = 'theo';
@@ -1401,7 +1401,7 @@ async function triggerWaveComplete() {
   cancelAnimationFrame(rafId);
 
   // ── No-death bonus helper
-  const noDeathBonus = S.livesLostThisWave === 0
+  const noDeathBonus = S.livesLostThisWave === 0 && S.wave > 1
     ? (S.isBossWave ? (gameMode === 'adults' ? 1000 : 600) : (gameMode === 'adults' ? 400 : 200))
     : 0;
 
