@@ -761,7 +761,7 @@ const MULTI_FEED_MAX      = 3;     // max multi-feed charges held at once
 const MULTI_FOOD_EMOJI    = '🍕';  // emoji for multi-feed bullets
 const TIME_BASE_EASY   = 15;  // seconds for wave 1 (easy/friends)
 const TIME_BASE_ADULTS = 15;  // seconds for wave 1 (adults)
-const TIME_GROW        = 12;  // extra seconds added per wave
+const TIME_GROW        = 4;   // extra seconds added per wave (smaller = more time pressure at high waves)
 const TIME_BOSS_EASY   = 120; // seconds for boss wave (easy)
 const TIME_BOSS_ADULTS = 80;  // seconds for boss wave (adults)
 let gameMode = 'theo';
@@ -918,7 +918,7 @@ function calcTimeBonus() {
   const elapsed    = (performance.now() - S.waveStartTime) / 1000;
   const remaining  = Math.max(0, S.waveTimeLimit - elapsed);
   if (remaining <= 0) return { bonus: 0, secs: 0 };
-  const rate  = S.isBossWave ? 15 : (gameMode === 'adults' ? 30 : 20);
+  const rate  = S.isBossWave ? 25 : (gameMode === 'adults' ? 50 : 35);
   const bonus = Math.floor(remaining) * rate;
   return { bonus, secs: Math.floor(remaining) };
 }
@@ -1399,6 +1399,14 @@ function stepAliens() {
     if (!a.isBoss && !a.isMinion && a.vy < 0) {
       a.vy -= 6;
     }
+    // Homing boost: when an animal is in the bottom third and the player has retreated
+    // to the top third, the animal can change direction faster to chase them down
+    if (!a.isBoss && !a.isMinion && a.y > S.H * (2 / 3) && S.playerY < S.H / 3) {
+      const toX = S.playerX - a.x, toY = S.playerY - a.y;
+      const dist = Math.sqrt(toX * toX + toY * toY) || 1;
+      a.vx += (toX / dist) * 12;
+      a.vy += (toY / dist) * 12;
+    }
     a.vx = Math.max(-maxV, Math.min(maxV, a.vx));
     a.vy = Math.max(-maxV, Math.min(maxV, a.vy));
   });
@@ -1562,8 +1570,8 @@ function spawnWaveAliens(advanceWave) {
   const spacing  = (W - marginX * 2) / (COLS - 1);
   const rowH     = Math.min(70, H * 0.11);
   const speedScale = 1 + (S.wave - 1) * 0.18;
-  // Armored animals appear from wave 4, increasing chance each wave
-  const armorChance = S.wave >= 4 ? Math.min(0.12 * (S.wave - 3), 0.45) : 0;
+  // Armored animals start at wave 2, +10% per wave (capped at 55%)
+  const armorChance = S.wave >= 2 ? Math.min(0.10 * (S.wave - 1), 0.55) : 0;
 
   S.aliens = [];
   for (let r = 0; r < ROWS; r++) {
