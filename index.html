@@ -706,8 +706,8 @@ const STREAK_WINDOW       = 6000;  // ms between hits to maintain a rapid streak
 const STREAK_THRESHOLD    = 5;     // hits in a row to earn one multi-feed charge
 const MULTI_FEED_MAX      = 3;     // max multi-feed charges held at once
 const MULTI_FOOD_EMOJI    = '🍕';  // emoji for multi-feed bullets
-const TIME_BASE_EASY   = 90;  // seconds per wave (easy/friends)
-const TIME_BASE_ADULTS = 60;  // seconds per wave (adults)
+const TIME_BASE_EASY   = 45;  // seconds per wave (easy/friends)
+const TIME_BASE_ADULTS = 30;  // seconds per wave (adults)
 const TIME_DECAY       = 5;   // seconds less per wave
 const TIME_MIN         = 30;  // minimum seconds allowed
 const TIME_BOSS_EASY   = 120; // seconds for boss wave (easy)
@@ -857,7 +857,7 @@ function calcTimeBonus() {
   const elapsed    = (performance.now() - S.waveStartTime) / 1000;
   const remaining  = Math.max(0, S.waveTimeLimit - elapsed);
   if (remaining <= 0) return { bonus: 0, secs: 0 };
-  const rate  = S.isBossWave ? 4 : (gameMode === 'adults' ? 10 : 6);
+  const rate  = S.isBossWave ? 15 : (gameMode === 'adults' ? 30 : 20);
   const bonus = Math.floor(remaining) * rate;
   return { bonus, secs: Math.floor(remaining) };
 }
