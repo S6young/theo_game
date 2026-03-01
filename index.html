@@ -1409,6 +1409,9 @@ function loseLife() {
     const left = S.shieldCharges > 0 ? ` ${S.shieldCharges} left` : ' gone';
     showGameToast(`🛡️ SHIELD BLOCKED!${left}`, '#44ffaa');
     sndStreak();
+    // The game loop returns after calling loseLife(), so we must reschedule it
+    lastTs = performance.now();
+    rafId = requestAnimationFrame(loop);
     return;
   }
   S.lives--;
