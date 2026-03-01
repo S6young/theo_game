@@ -1046,7 +1046,7 @@ function loop(ts) {
 
         // Feed streak — consecutive hits without any miss or death
         S.feedStreak++;
-        const FEED_MILESTONES = [[20, 500], [100, 3000], [200, 10000]];
+        const FEED_MILESTONES = [[20, 500], [100, 2000], [200, 5000]];
         for (const [mark, pts] of FEED_MILESTONES) {
           if (S.feedStreak === mark && !S.feedMilestonesHit.has(mark)) {
             S.feedMilestonesHit.add(mark);
