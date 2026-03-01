@@ -1458,17 +1458,19 @@ function stepAliens() {
       a.vy -= 6;
     }
     // Homing boost: when an animal is in the bottom half and the player has retreated
-    // to the top half, the animal can change direction faster to chase them down.
-    // Boost scales down slightly with wave so early waves feel most punishing.
+    // to the top half, snap velocity hard toward the player and allow the cap
+    // to be exceeded so they visibly accelerate upward.
     if (!a.isBoss && !a.isMinion && a.y > S.H / 2 && S.playerY < S.H / 2) {
       const toX = S.playerX - a.x, toY = S.playerY - a.y;
       const dist = Math.sqrt(toX * toX + toY * toY) || 1;
-      const homingStr = Math.max(18, 28 - S.wave * 1.5);
-      a.vx += (toX / dist) * homingStr;
-      a.vy += (toY / dist) * homingStr;
+      // Directly set velocity toward player at boosted speed, ignoring current direction
+      const homingSpd = maxV * 2;
+      a.vx = (toX / dist) * homingSpd;
+      a.vy = (toY / dist) * homingSpd;
+    } else {
+      a.vx = Math.max(-maxV, Math.min(maxV, a.vx));
+      a.vy = Math.max(-maxV, Math.min(maxV, a.vy));
     }
-    a.vx = Math.max(-maxV, Math.min(maxV, a.vx));
-    a.vy = Math.max(-maxV, Math.min(maxV, a.vy));
   });
 }
 
