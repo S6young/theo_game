@@ -1221,12 +1221,14 @@ function loop(ts) {
           sndStreak();
           updateMultiFeedDisplay();
           showGameToast('🍕 MULTI-FEED READY!', '#ffdd44');
+          navigator.vibrate?.([40, 30, 40]);
         }
         // Mega-feed: from wave 3, a higher streak unlocks a 5× blast
         if (S.wave >= 3 && S.streak > 0 && S.streak % 8 === 0 && S.megaFeedCharge < 2) {
           S.megaFeedCharge++;
           updateMegaFeedDisplay();
           showGameToast('🍇 MEGA FEED READY! 5 at once!', '#ff44ff');
+          navigator.vibrate?.([60, 20, 60, 20, 60]);
         }
 
         deadBullets.push(bi);
