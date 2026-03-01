@@ -494,6 +494,30 @@ body {
   z-index: 11 !important;
 }
 
+/* ── ARMORED ALIEN ── */
+.alien.armored {
+  filter: drop-shadow(0 0 10px rgba(255,215,0,1)) drop-shadow(0 0 22px rgba(255,165,0,0.8)) !important;
+}
+.armor-badge {
+  position: absolute;
+  font-size: 0.42em;
+  bottom: -4px;
+  right: -4px;
+  pointer-events: none;
+  line-height: 1;
+}
+
+/* ── GOLDEN ALIEN ── */
+.alien.golden {
+  filter: drop-shadow(0 0 16px rgba(255,230,0,1)) drop-shadow(0 0 34px rgba(255,200,0,0.9)) !important;
+  animation: golden-pulse 0.4s ease-in-out infinite alternate !important;
+  z-index: 13 !important;
+}
+@keyframes golden-pulse {
+  from { transform: translateX(-50%) translateY(-50%) scale(1)    rotate(-5deg); }
+  to   { transform: translateX(-50%) translateY(-62%) scale(1.22) rotate(5deg); }
+}
+
 /* ── MULTI-FEED BULLET ── */
 .bullet.multi {
   filter: drop-shadow(0 0 14px rgba(255,220,0,1)) drop-shadow(0 0 28px rgba(255,100,0,0.9)) !important;
@@ -824,6 +848,7 @@ function initState() {
     frenzyTimer:      null,
     slowed:           false,
     slowTimer:        null,
+    goldenTimer:      null,
   };
 }
 
@@ -1134,6 +1159,19 @@ function loop(ts) {
         boom(a.x, a.y);
         S.shotsHit++;
 
+        // ── ARMOR: first hit cracks the shell, bullet is consumed but animal survives
+        if (a.armor) {
+          a.armor = false;
+          a.el.classList.remove('armored');
+          const badge = a.el.querySelector('.armor-badge');
+          if (badge) badge.remove();
+          a.el.style.filter = 'brightness(5)';
+          setTimeout(() => { if (a.el) a.el.style.filter = ''; }, 180);
+          showGameToast('💥 ARMOR CRACKED!', '#ffbb00');
+          deadBullets.push(bi); b.el.remove();
+          break;
+        }
+
         // Feed streak — consecutive hits without any miss or death
         S.feedStreak++;
         const FEED_MILESTONES = [[20, 500], [100, 2000], [200, 5000]];
@@ -1201,6 +1239,15 @@ function loop(ts) {
           a.alive = false;
           if (a.el) { a.el.remove(); a.el = null; }
           S.score += 15 * S.combo * (S.frenzying ? 2 : 1);
+        } else if (a.isGolden) {
+          sndStreak();
+          a.alive = false;
+          clearTimeout(S.goldenTimer); S.goldenTimer = null;
+          if (a.el) { a.el.remove(); a.el = null; }
+          const goldenBonus = 50 * S.combo * (S.frenzying ? 2 : 1);
+          S.score += goldenBonus;
+          showGameToast(`⭐ GOLDEN! +${goldenBonus}!`, '#ffdd00');
+          navigator.vibrate?.([30, 20, 30, 20, 30]);
         } else {
           sndHit();
           const fedEmoji = a.emoji;
@@ -1232,8 +1279,24 @@ function loop(ts) {
   });
   deadBullets.sort((a,b)=>b-a).forEach(i => S.bullets.splice(i,1));
 
-  // ── CHECK WAVE COMPLETE
-  if (S.aliens.every(a => !a.alive)) { triggerWaveComplete(); return; }
+  // ── CHECK WAVE COMPLETE (golden animals don't block completion)
+  if (S.aliens.every(a => !a.alive || a.isGolden)) { triggerWaveComplete(); return; }
+
+  // ── DODGE REFLEX (wave 3+): regular animals jink away from nearby bullets
+  if (S.wave >= 3 && !S.isBossWave && S.bullets.length > 0) {
+    S.aliens.forEach(a => {
+      if (!a.alive || a.isBoss || a.isMinion || a.isGolden) return;
+      for (const b of S.bullets) {
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        if (d < 85) {
+          a.vx -= (dx / d) * 18; // lateral jink away from bullet
+          a.vx = Math.max(-DIFF.maxV, Math.min(DIFF.maxV, a.vx));
+          break;
+        }
+      }
+    });
+  }
 
   // ── ALIEN MOVEMENT (speeds up as animals get close to player)
   const aliveNow = S.aliens.filter(a => a.alive);
@@ -1489,6 +1552,7 @@ function spawnWaveAliens(advanceWave) {
 
   S.sameAnimalStreak = 0; S.lastFedEmoji = null;
   S.livesLostThisWave = 0;
+  clearTimeout(S.goldenTimer); S.goldenTimer = null;
   S.bullets.forEach(b => b.el.remove()); S.bullets = [];
   S.aliens.forEach(a => { if (a.el) { a.el.remove(); a.el = null; } });
 
@@ -1498,22 +1562,39 @@ function spawnWaveAliens(advanceWave) {
   const spacing  = (W - marginX * 2) / (COLS - 1);
   const rowH     = Math.min(70, H * 0.11);
   const speedScale = 1 + (S.wave - 1) * 0.18;
+  // Armored animals appear from wave 4, increasing chance each wave
+  const armorChance = S.wave >= 4 ? Math.min(0.12 * (S.wave - 3), 0.45) : 0;
 
   S.aliens = [];
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
+      const isArmored = armorChance > 0 && Math.random() < armorChance;
       const el = document.createElement('div');
-      el.className = 'alien';
+      el.className = 'alien' + (isArmored ? ' armored' : '');
       el.textContent = ROW_EMOJIS[r][c];
+      if (isArmored) {
+        const badge = document.createElement('span');
+        badge.className = 'armor-badge';
+        badge.textContent = '🛡️';
+        el.appendChild(badge);
+      }
       const x = marginX + c * spacing, y = 55 + r * rowH;
       el.style.left = x + 'px'; el.style.top = y + 'px';
       area.appendChild(el);
       S.aliens.push({
         x, y, emoji: ROW_EMOJIS[r][c], alive: true, el,
+        armor: isArmored,
         vx: (Math.random() * 2 - 1) * DIFF.initVx * speedScale,
         vy: (Math.random() * 2 - 1) * DIFF.initVy * speedScale,
       });
     }
+  }
+
+  // Golden animal: schedule a fast bonus animal to appear mid-wave (wave 2+)
+  if (S.wave >= 2) {
+    S.goldenTimer = setTimeout(() => {
+      if (!S.gameOver && !S.won && !S.isBossWave) spawnGoldenAnimal();
+    }, 3500);
   }
   S.waveTimeLimit = getWaveTimeLimit(false);
   S.waveStartTime = performance.now();
@@ -1524,6 +1605,11 @@ function spawnWaveAliens(advanceWave) {
 
 async function triggerWaveComplete() {
   cancelAnimationFrame(rafId);
+  // Clean up golden animal if it's still alive
+  clearTimeout(S.goldenTimer); S.goldenTimer = null;
+  S.aliens.forEach(a => {
+    if (a.isGolden && a.alive) { a.alive = false; if (a.el) { a.el.remove(); a.el = null; } }
+  });
 
   // ── No-death bonus helper
   const noDeathBonus = S.livesLostThisWave === 0
@@ -1642,7 +1728,42 @@ function spawnBossMinions() {
   });
 }
 
+function spawnGoldenAnimal() {
+  const area = document.getElementById('game-area');
+  const el = document.createElement('div');
+  el.className = 'alien golden';
+  const allEmojis = ['🐢','🐠','🐡','🐟','🦑','🐙'];
+  const emoji = allEmojis[Math.floor(Math.random() * allEmojis.length)];
+  el.textContent = emoji;
+  const x = S.W * (0.2 + Math.random() * 0.6);
+  el.style.left = x + 'px';
+  el.style.top  = '75px';
+  area.appendChild(el);
+  const speedMult = 1.7 + S.wave * 0.15;
+  const alien = {
+    x, y: 75, emoji, alive: true, el,
+    isGolden: true,
+    vx: (Math.random() < 0.5 ? 1 : -1) * DIFF.initVx * speedMult,
+    vy: DIFF.initVy * speedMult,
+  };
+  S.aliens.push(alien);
+  showGameToast('⭐ GOLDEN ANIMAL! Catch it!', '#ffdd00');
+  navigator.vibrate?.([20, 10, 20]);
+  // Auto-vanish after 6s
+  S.goldenTimer = setTimeout(() => {
+    if (alien.alive) {
+      alien.alive = false;
+      if (alien.el) {
+        alien.el.style.transition = 'opacity 0.5s';
+        alien.el.style.opacity = '0';
+        setTimeout(() => { if (alien.el) { alien.el.remove(); alien.el = null; } }, 500);
+      }
+    }
+  }, 6000);
+}
+
 function spawnBossWave() {
+  clearTimeout(S.goldenTimer); S.goldenTimer = null;
   S.isBossWave = true;
   S.bossMaxHp  = (gameMode === 'adults') ? BOSS_HP_HARD : BOSS_HP_EASY;
   S.bossHp     = S.bossMaxHp;
@@ -1713,6 +1834,7 @@ function startGame(mode) {
   }
 
   cancelAnimationFrame(rafId);
+  clearTimeout(S.goldenTimer);
   hideBossBar();
   showScreen(null);
   clearArea();
