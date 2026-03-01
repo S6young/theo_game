@@ -943,7 +943,7 @@ function updateMultiFeedDisplay() {
 function updateMegaFeedDisplay() {
   const el = document.getElementById('megafeed-display');
   if (S.megaFeedCharge > 0) {
-    el.textContent = `🚀 MEGA FEED ${'⚡'.repeat(S.megaFeedCharge)}`;
+    el.textContent = `🍇 MEGA FEED ${'⚡'.repeat(S.megaFeedCharge)}`;
     el.style.opacity = '1';
     el.classList.add('charged');
   } else {
@@ -1091,7 +1091,7 @@ function shoot() {
     megaOffsets.forEach(offset => {
       const mel = document.createElement('div');
       mel.className = 'bullet mega';
-      mel.textContent = '🚀';
+      mel.textContent = '🍇';
       const bx = Math.max(20, Math.min(S.W - 20, S.playerX + offset));
       const by = S.playerY - 30;
       mel.style.left = bx + 'px';
@@ -1222,11 +1222,11 @@ function loop(ts) {
           updateMultiFeedDisplay();
           showGameToast('🍕 MULTI-FEED READY!', '#ffdd44');
         }
-        // Mega-feed: after wave 3, a higher streak unlocks a 5× blast
-        if (S.wave > 3 && S.streak > 0 && S.streak % 8 === 0 && S.megaFeedCharge < 2) {
+        // Mega-feed: from wave 3, a higher streak unlocks a 5× blast
+        if (S.wave >= 3 && S.streak > 0 && S.streak % 8 === 0 && S.megaFeedCharge < 2) {
           S.megaFeedCharge++;
           updateMegaFeedDisplay();
-          showGameToast('🚀 MEGA FEED READY! 5 at once!', '#ff44ff');
+          showGameToast('🍇 MEGA FEED READY! 5 at once!', '#ff44ff');
         }
 
         deadBullets.push(bi);
