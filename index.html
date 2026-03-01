@@ -671,7 +671,7 @@ body {
       <div id="boss-bar-track"><div id="boss-bar-fill"></div></div>
     </div>
     <div id="player">🧺</div>
-    <div id="power-btn" onclick="activatePower()"></div>
+    <div id="power-btn" onclick="activatePower()" ontouchend="activatePower()"></div>
     <div id="hint">arrow keys or drag to move &nbsp;|&nbsp; SPACE or tap = throw food!</div>
   </div>
   </div>
@@ -1813,6 +1813,7 @@ area.addEventListener('click', e => {
 
 // Touch
 area.addEventListener('touchstart', e => {
+  if (e.target.closest('#power-btn')) return; // let power button handle its own tap
   e.preventDefault();
   if (S.gameOver || S.won) return;
   const t = e.touches[0];
