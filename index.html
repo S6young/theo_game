@@ -1401,7 +1401,7 @@ async function triggerWaveComplete() {
   cancelAnimationFrame(rafId);
 
   // ── No-death bonus helper
-  const noDeathBonus = S.livesLostThisWave === 0 && S.wave > 1
+  const noDeathBonus = S.livesLostThisWave === 0
     ? (S.isBossWave ? (gameMode === 'adults' ? 1000 : 600) : (gameMode === 'adults' ? 400 : 200))
     : 0;
 
