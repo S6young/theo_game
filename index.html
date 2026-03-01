@@ -759,9 +759,9 @@ const STREAK_WINDOW       = 6000;  // ms between hits to maintain a rapid streak
 const STREAK_THRESHOLD    = 3;     // hits in a row to earn one multi-feed charge
 const MULTI_FEED_MAX      = 3;     // max multi-feed charges held at once
 const MULTI_FOOD_EMOJI    = '🍕';  // emoji for multi-feed bullets
-const TIME_BASE_EASY   = 15;  // seconds for wave 1 (easy/friends)
-const TIME_BASE_ADULTS = 15;  // seconds for wave 1 (adults)
-const TIME_GROW        = 4;   // extra seconds added per wave (smaller = more time pressure at high waves)
+const TIME_BASE_EASY   = 12;  // seconds for wave 1 (easy/friends)
+const TIME_BASE_ADULTS = 12;  // seconds for wave 1 (adults)
+const TIME_GROW        = 2;   // extra seconds added per wave (smaller = more time pressure at high waves)
 const TIME_BOSS_EASY   = 120; // seconds for boss wave (easy)
 const TIME_BOSS_ADULTS = 80;  // seconds for boss wave (adults)
 let gameMode = 'theo';
@@ -1399,9 +1399,9 @@ function stepAliens() {
     if (!a.isBoss && !a.isMinion && a.vy < 0) {
       a.vy -= 6;
     }
-    // Homing boost: when an animal is in the bottom third and the player has retreated
-    // to the top third, the animal can change direction faster to chase them down
-    if (!a.isBoss && !a.isMinion && a.y > S.H * (2 / 3) && S.playerY < S.H / 3) {
+    // Homing boost: when an animal is in the bottom half and the player has retreated
+    // to the top half, the animal can change direction faster to chase them down
+    if (!a.isBoss && !a.isMinion && a.y > S.H / 2 && S.playerY < S.H / 2) {
       const toX = S.playerX - a.x, toY = S.playerY - a.y;
       const dist = Math.sqrt(toX * toX + toY * toY) || 1;
       a.vx += (toX / dist) * 12;
@@ -1458,9 +1458,13 @@ function loseLife() {
       const wasBoss = S.isBossWave;
       S.isBossWave = false;
       hideBossBar();
+      const savedStart = S.waveStartTime, bannerAt = performance.now();
       const msg = wasBoss ? '🦒 The giraffe is back!' : '😤 They\'re coming back!';
       showWaveBanner(`<div class="bt">${msg}</div><div class="bs">Get ready...</div>`, 2200)
-        .then(() => wasBoss ? spawnBossWave() : spawnWaveAliens(false));
+        .then(() => {
+          wasBoss ? spawnBossWave() : spawnWaveAliens(false);
+          S.waveStartTime = savedStart + (performance.now() - bannerAt); // preserve elapsed time
+        });
     } else if (S.isBossWave) {
       // Easy mode boss wave: pause, then respawn boss at full HP
       cancelAnimationFrame(rafId);
@@ -1468,8 +1472,12 @@ function loseLife() {
       S.bullets.forEach(b => b.el.remove()); S.bullets = [];
       S.isBossWave = false;
       hideBossBar();
+      const savedStart = S.waveStartTime, bannerAt = performance.now();
       showWaveBanner(`<div class="bt">🦒 The giraffe is hungry again!</div><div class="bs">Get ready...</div>`, 2200)
-        .then(() => spawnBossWave());
+        .then(() => {
+          spawnBossWave();
+          S.waveStartTime = savedStart + (performance.now() - bannerAt); // preserve elapsed time
+        });
     } else {
       resetAlienPositions();
     }
