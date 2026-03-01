@@ -1282,16 +1282,21 @@ function loop(ts) {
   // ── CHECK WAVE COMPLETE (golden animals don't block completion)
   if (S.aliens.every(a => !a.alive || a.isGolden)) { triggerWaveComplete(); return; }
 
-  // ── DODGE REFLEX (wave 2+): regular animals jink away from nearby bullets
+  // ── DODGE REFLEX (wave 2+): regular animals jink away from nearby bullets.
+  // Scales from weak (wave 2) to full strength (wave 7+).
   if (S.wave >= 2 && !S.isBossWave && S.bullets.length > 0) {
+    const t = Math.min(1, (S.wave - 2) / 5); // 0 at wave 2, 1 at wave 7+
+    const dodgeRadius = 85 + t * 35;          // 85 → 120
+    const jinkX = 18 + t * 6;                 // 18 → 24
+    const jinkY = t * 10;                     //  0 → 10
     S.aliens.forEach(a => {
       if (!a.alive || a.isBoss || a.isMinion || a.isGolden) return;
       for (const b of S.bullets) {
         const dx = b.x - a.x, dy = b.y - a.y;
         const d = Math.sqrt(dx*dx + dy*dy);
-        if (d < 120) {
-          a.vx -= (dx / d) * 24; // lateral jink away from bullet
-          a.vy -= (dy / d) * 10; // small vertical component too
+        if (d < dodgeRadius) {
+          a.vx -= (dx / d) * jinkX;
+          a.vy -= (dy / d) * jinkY;
           a.vx = Math.max(-DIFF.maxV, Math.min(DIFF.maxV, a.vx));
           a.vy = Math.max(-DIFF.maxV, Math.min(DIFF.maxV, a.vy));
           break;
