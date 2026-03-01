@@ -783,6 +783,9 @@ function initState() {
     streak:           0,
     streakLastHit:    0,
     multiFeedCharge:  0,
+    feedStreak:       0,
+    feedMilestonesHit: new Set(),
+    livesLostThisWave: 0,
     waveStartTime: performance.now(),
     waveTimeLimit: gameMode === 'adults' ? TIME_BASE_ADULTS : TIME_BASE_EASY,
   };
@@ -1016,11 +1019,12 @@ function loop(ts) {
     b.el.style.top = b.y + 'px';
 
     if (b.y < -40) {
-      // Miss — reset combo and streak
+      // Miss — reset combo, streak, and feed streak
       deadBullets.push(bi); b.el.remove();
       clearTimeout(S.comboTimer);
       S.combo = 1; updateComboDisplay();
       S.streak = 0;
+      S.feedStreak = 0;
       return;
     }
 
@@ -1039,6 +1043,18 @@ function loop(ts) {
         // ── CONFIRMED HIT
         boom(a.x, a.y);
         S.shotsHit++;
+
+        // Feed streak — consecutive hits without any miss or death
+        S.feedStreak++;
+        const FEED_MILESTONES = [[20, 500], [100, 3000], [200, 10000]];
+        for (const [mark, pts] of FEED_MILESTONES) {
+          if (S.feedStreak === mark && !S.feedMilestonesHit.has(mark)) {
+            S.feedMilestonesHit.add(mark);
+            S.score += pts;
+            updateHUD();
+            showGameToast(`🔥 ${mark} IN A ROW! +${pts.toLocaleString()}`, '#ff6600');
+          }
+        }
 
         // Combo update
         clearTimeout(S.comboTimer);
@@ -1220,8 +1236,10 @@ function stepAliens() {
 ══════════════════════════════════════════════ */
 function loseLife() {
   S.lives--;
+  S.livesLostThisWave++;
   S.streak = 0; S.streakLastHit = 0;
   S.multiFeedCharge = 0; updateMultiFeedDisplay();
+  S.feedStreak = 0;
   updateHUD();
   sndLifeLost();
 
@@ -1346,6 +1364,7 @@ function spawnWaveAliens(advanceWave) {
   S.combo = 1; clearTimeout(S.comboTimer); updateComboDisplay();
   S.streak = 0; S.streakLastHit = 0;
   S.multiFeedCharge = 0; updateMultiFeedDisplay();
+  S.livesLostThisWave = 0;
   S.bullets.forEach(b => b.el.remove()); S.bullets = [];
   S.aliens.forEach(a => { if (a.el) { a.el.remove(); a.el = null; } });
 
@@ -1382,16 +1401,22 @@ function spawnWaveAliens(advanceWave) {
 async function triggerWaveComplete() {
   cancelAnimationFrame(rafId);
 
+  // ── No-death bonus helper
+  const noDeathBonus = S.livesLostThisWave === 0
+    ? (S.isBossWave ? (gameMode === 'adults' ? 1000 : 600) : (gameMode === 'adults' ? 400 : 200))
+    : 0;
+
   // ── Boss defeated path
   if (S.isBossWave) {
     const { bonus: tBonus, secs } = calcTimeBonus();
     S.isBossWave = false;
     hideBossBar();
-    S.score += 300 + tBonus;
+    S.score += 300 + tBonus + noDeathBonus;
     updateHUD();
     sndBossDefeat();
     const bParts = ['+300 boss bonus!'];
-    if (tBonus > 0) bParts.push(`+${tBonus} speed bonus! (${secs}s left)`);
+    if (tBonus > 0)      bParts.push(`+${tBonus} speed bonus! (${secs}s left)`);
+    if (noDeathBonus > 0) bParts.push(`+${noDeathBonus} flawless!`);
     await showWaveBanner(
       `<div class="bt">🦒 BOSS DEFEATED! 🎉</div><div class="bs">${bParts.join('  ')}</div>`, 2800
     );
@@ -1405,12 +1430,14 @@ async function triggerWaveComplete() {
 
   const { pct, bonus, label } = calcAccuracyBonus();
   const { bonus: tBonus, secs } = calcTimeBonus();
-  if (bonus)  { S.score += bonus;  updateHUD(); }
-  if (tBonus) { S.score += tBonus; updateHUD(); }
+  if (bonus)        { S.score += bonus;        updateHUD(); }
+  if (tBonus)       { S.score += tBonus;       updateHUD(); }
+  if (noDeathBonus) { S.score += noDeathBonus; updateHUD(); }
   const parts = [];
-  if (bonus)       parts.push(`+${bonus} accuracy!`);
-  else if (label)  parts.push(label);
-  if (tBonus > 0)  parts.push(`+${tBonus} speed bonus! (${secs}s left)`);
+  if (bonus)            parts.push(`+${bonus} accuracy!`);
+  else if (label)       parts.push(label);
+  if (tBonus > 0)       parts.push(`+${tBonus} speed bonus! (${secs}s left)`);
+  if (noDeathBonus > 0) parts.push(`+${noDeathBonus} flawless!`);
   const bonusStr = parts.join('  ');
 
   await showWaveBanner(
@@ -1501,6 +1528,7 @@ function spawnBossWave() {
   S.combo = 1; clearTimeout(S.comboTimer); updateComboDisplay();
   S.streak = 0; S.streakLastHit = 0;
   S.multiFeedCharge = 0; updateMultiFeedDisplay();
+  S.livesLostThisWave = 0;
   S.bullets.forEach(b => b.el.remove()); S.bullets = [];
   S.aliens.forEach(a => { if (a.el) { a.el.remove(); a.el = null; } });
 
