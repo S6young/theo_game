@@ -1282,8 +1282,8 @@ function loop(ts) {
   // ── CHECK WAVE COMPLETE (golden animals don't block completion)
   if (S.aliens.every(a => !a.alive || a.isGolden)) { triggerWaveComplete(); return; }
 
-  // ── DODGE REFLEX (wave 1+): regular animals jink away from nearby bullets
-  if (!S.isBossWave && S.bullets.length > 0) {
+  // ── DODGE REFLEX (wave 2+): regular animals jink away from nearby bullets
+  if (S.wave >= 2 && !S.isBossWave && S.bullets.length > 0) {
     S.aliens.forEach(a => {
       if (!a.alive || a.isBoss || a.isMinion || a.isGolden) return;
       for (const b of S.bullets) {
