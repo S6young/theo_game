@@ -476,6 +476,59 @@ body {
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* ── BOSS PHASE 2 (ENRAGED) ── */
+.boss.phase2 {
+  filter: drop-shadow(0 0 30px rgba(255,30,0,1)) drop-shadow(0 0 60px rgba(255,0,50,0.9)) !important;
+  animation: boss-rage 0.7s ease-in-out infinite alternate !important;
+}
+@keyframes boss-rage {
+  from { transform: translateX(-50%) translateY(-50%) scale(1.05) rotate(-7deg); }
+  to   { transform: translateX(-50%) translateY(-68%) scale(1.2)  rotate(7deg); }
+}
+
+/* ── BOSS MINIONS ── */
+.boss-minion {
+  filter: drop-shadow(0 0 14px rgba(255,130,30,0.95)) !important;
+  animation: boss-float 1.0s ease-in-out infinite alternate !important;
+  z-index: 11 !important;
+}
+
+/* ── MULTI-FEED BULLET ── */
+.bullet.multi {
+  filter: drop-shadow(0 0 14px rgba(255,220,0,1)) drop-shadow(0 0 28px rgba(255,100,0,0.9)) !important;
+  animation: food-spin 0.7s linear infinite !important;
+  font-size: clamp(32px, 5.5vw, 50px) !important;
+}
+
+/* ── MULTI-FEED CHARGE DISPLAY ── */
+#multifeed-display {
+  position: absolute;
+  top: 90px;
+  left: 16px;
+  font-size: clamp(12px, 2.1vw, 19px);
+  color: #ffdd44;
+  text-shadow: 0 0 12px #ffaa00, 2px 2px 0 #664400;
+  z-index: 10;
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+#multifeed-display.charged {
+  animation: multifeed-pulse 0.6s ease-in-out infinite alternate;
+}
+@keyframes multifeed-pulse {
+  from { transform: scale(1); }
+  to   { transform: scale(1.1); }
+}
+
+/* ── TOAST NOTIFICATION (streak / events) ── */
+@keyframes toast-rise {
+  0%   { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1.3); }
+  25%  { opacity: 1; transform: translateX(-50%) translateY(-8px)  scale(1);   }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-55px) scale(0.85); }
+}
 </style>
 </head>
 <body>
@@ -557,6 +610,7 @@ body {
   <div id="lives-display">🧺🧺🧺</div>
   <div id="mode-badge"></div>
   <div id="combo-display"></div>
+  <div id="multifeed-display"></div>
   <div id="game-area">
   <div id="wave-banner"></div>
     <div id="timer-bar-wrap"><div id="timer-bar-fill"></div></div>
@@ -617,6 +671,9 @@ function sndWin() {
 function sndLose()       { [380,300,240,180,130].forEach((n,i)=>setTimeout(()=>tone(n,'sawtooth',0.25,0.3),i*180)); }
 function sndBossHit()    { tone(330,'triangle',0.06,0.22,600); setTimeout(()=>tone(660,'sine',0.1,0.22,1000),75); }
 function sndBossDefeat() { [262,330,392,523,659,784,1047,1319].forEach((n,i)=>setTimeout(()=>tone(n,'sine',0.28,0.45),i*110)); }
+function sndStreak()     { [523,659,784,1047,1319].forEach((n,i)=>setTimeout(()=>tone(n,'sine',0.22,0.28),i*45)); }
+function sndMultiFeed()  { tone(880,'triangle',0.2,0.5,1760); setTimeout(()=>tone(1319,'sine',0.25,0.35),120); }
+function sndBossEnrage() { [300,250,200,400,600].forEach((n,i)=>setTimeout(()=>tone(n,'sawtooth',0.3,0.25),i*80)); setTimeout(()=>tone(800,'triangle',0.25,0.4),450); }
 
 /* ══════════════════════════════════════════════
    CONSTANTS
@@ -643,7 +700,12 @@ const COMBO_WINDOW  = 2500; // ms between hits to keep combo alive
 const MAX_WAVES     = 5;    // waves before win in easy/friends mode
 const BOSS_WAVE     = 3;    // boss spawns after completing this wave
 const BOSS_HP_EASY  = 10;   // hits needed in easy/friends mode
-const BOSS_HP_HARD  = 16;   // hits needed in adults mode
+const BOSS_HP_HARD  = 20;   // hits needed in adults mode
+const BOSS_PHASE2_PCT     = 0.5;   // HP fraction at which boss enrages in adults mode
+const STREAK_WINDOW       = 1200;  // ms between hits to maintain a rapid streak
+const STREAK_THRESHOLD    = 3;     // hits in a row to earn one multi-feed charge
+const MULTI_FEED_MAX      = 3;     // max multi-feed charges held at once
+const MULTI_FOOD_EMOJI    = '🍕';  // emoji for multi-feed bullets
 const TIME_BASE_EASY   = 90;  // seconds per wave (easy/friends)
 const TIME_BASE_ADULTS = 60;  // seconds per wave (adults)
 const TIME_DECAY       = 5;   // seconds less per wave
@@ -716,6 +778,11 @@ function initState() {
     isBossWave:    false,
     bossHp:        0,
     bossMaxHp:     0,
+    bossPhase2:    false,
+    bossMinionsSpawned: false,
+    streak:           0,
+    streakLastHit:    0,
+    multiFeedCharge:  0,
     waveStartTime: performance.now(),
     waveTimeLimit: gameMode === 'adults' ? TIME_BASE_ADULTS : TIME_BASE_EASY,
   };
@@ -796,6 +863,37 @@ function updateComboDisplay() {
   if (S.combo > 1) { el.textContent = `🔥 COMBO x${S.combo}!`; el.style.opacity = '1'; }
   else             { el.style.opacity = '0'; }
 }
+function updateMultiFeedDisplay() {
+  const el = document.getElementById('multifeed-display');
+  const player = document.getElementById('player');
+  if (S.multiFeedCharge > 0) {
+    el.textContent = `🍕 MULTI-FEED ${'✨'.repeat(S.multiFeedCharge)}`;
+    el.style.opacity = '1';
+    el.classList.add('charged');
+    if (player) player.style.filter = 'drop-shadow(0 0 22px rgba(255,220,0,1)) drop-shadow(0 0 44px rgba(255,120,0,0.85))';
+  } else {
+    el.style.opacity = '0';
+    el.classList.remove('charged');
+    if (player) player.style.filter = 'drop-shadow(0 0 12px rgba(100,220,255,0.9))';
+  }
+}
+function showGameToast(msg, color) {
+  const el = document.createElement('div');
+  el.style.cssText = `position:absolute;top:125px;left:50%;transform:translateX(-50%);font-size:clamp(15px,2.8vw,26px);color:${color||'#ff44ff'};text-shadow:0 0 14px currentColor;z-index:15;pointer-events:none;white-space:nowrap;font-family:inherit;animation:toast-rise 1.8s ease-out forwards;`;
+  el.textContent = msg;
+  document.getElementById('game-container').appendChild(el);
+  setTimeout(() => el.remove(), 1800);
+}
+function dodgeEffect(x, y) {
+  const area = document.getElementById('game-area');
+  const el = document.createElement('div');
+  el.className = 'explosion';
+  el.style.left = x + 'px';
+  el.style.top  = y + 'px';
+  el.textContent = '😏';
+  area.appendChild(el);
+  setTimeout(() => el.remove(), 700);
+}
 
 const ALL_SCREENS = ['tap-screen','start-screen','win-screen','lose-screen','name-screen','leaderboard-screen'];
 function showScreen(id) {
@@ -856,6 +954,28 @@ function shoot() {
   S.lastShot = now;
 
   const area = document.getElementById('game-area');
+
+  // ── MULTI-FEED: fire 3 spread bullets
+  if (S.multiFeedCharge > 0) {
+    S.multiFeedCharge--;
+    updateMultiFeedDisplay();
+    sndMultiFeed();
+    const offsets = [-55, 0, 55];
+    offsets.forEach(offset => {
+      const mel = document.createElement('div');
+      mel.className = 'bullet multi';
+      mel.textContent = MULTI_FOOD_EMOJI;
+      const bx = Math.max(20, Math.min(S.W - 20, S.playerX + offset));
+      const by = S.playerY - 30;
+      mel.style.left = bx + 'px';
+      mel.style.top  = by + 'px';
+      area.appendChild(mel);
+      S.bullets.push({ x: bx, y: by, el: mel, isMulti: true });
+    });
+    S.shotsFired += 3;
+    return;
+  }
+
   const el = document.createElement('div');
   el.className = 'bullet';
   el.textContent = FOOD_EMOJIS[foodIdx % FOOD_EMOJIS.length];
@@ -896,26 +1016,55 @@ function loop(ts) {
     b.el.style.top = b.y + 'px';
 
     if (b.y < -40) {
-      // Miss — reset combo
+      // Miss — reset combo and streak
       deadBullets.push(bi); b.el.remove();
       clearTimeout(S.comboTimer);
       S.combo = 1; updateComboDisplay();
+      S.streak = 0;
       return;
     }
 
     for (const a of S.aliens) {
       if (!a.alive) continue;
-      const hr = a.isBoss ? 65 : 38;
+      const hr = a.isBoss ? 65 : a.isMinion ? 45 : 38;
       if (Math.abs(b.x - a.x) < hr && Math.abs(b.y - a.y) < hr) {
-        // HIT!
+
+        // ── BOSS DODGE (phase 2, adults mode)
+        if (a.isBoss && gameMode === 'adults' && S.bossPhase2 && Math.random() < 0.25) {
+          a.vx += (Math.random() < 0.5 ? -1 : 1) * 38;
+          dodgeEffect(a.x, a.y);
+          continue; // bullet keeps flying past the boss
+        }
+
+        // ── CONFIRMED HIT
         boom(a.x, a.y);
         S.shotsHit++;
+
+        // Combo update
         clearTimeout(S.comboTimer);
         S.combo = Math.min(S.combo + 1, 8);
         updateComboDisplay();
         S.comboTimer = setTimeout(() => { S.combo = 1; updateComboDisplay(); }, COMBO_WINDOW);
+
+        // Streak tracking — rapid consecutive hits
+        const hitNow = performance.now();
+        if (hitNow - S.streakLastHit <= STREAK_WINDOW) {
+          S.streak++;
+        } else {
+          S.streak = 1;
+        }
+        S.streakLastHit = hitNow;
+        // Award multi-feed charge at streak threshold
+        if (S.streak > 0 && S.streak % STREAK_THRESHOLD === 0 && S.multiFeedCharge < MULTI_FEED_MAX) {
+          S.multiFeedCharge++;
+          sndStreak();
+          updateMultiFeedDisplay();
+          showGameToast('🍕 MULTI-FEED READY!', '#ffdd44');
+        }
+
         deadBullets.push(bi);
         b.el.remove();
+
         if (a.isBoss) {
           sndBossHit();
           S.bossHp--;
@@ -924,11 +1073,27 @@ function loop(ts) {
           a.size = (a.size || 100) + 8;
           if (a.el) a.el.style.fontSize = a.size + 'px';
           updateBossBar();
+          // Phase 2 transition (adults only, at 50% HP)
+          if (gameMode === 'adults' && !S.bossPhase2 && S.bossHp <= Math.floor(S.bossMaxHp * BOSS_PHASE2_PCT)) {
+            activateBossPhase2(a);
+          }
           if (S.bossHp <= 0) {
             a.alive = false;
-            a.el.remove(); a.el = null;
+            if (a.el) { a.el.remove(); a.el = null; }
             sndBossDefeat();
+            // Clear any surviving minions when boss is defeated
+            S.aliens.forEach(m => {
+              if (m.isMinion && m.alive) {
+                m.alive = false;
+                if (m.el) { boom(m.x, m.y); m.el.remove(); m.el = null; }
+              }
+            });
           }
+        } else if (a.isMinion) {
+          sndHit();
+          a.alive = false;
+          if (a.el) { a.el.remove(); a.el = null; }
+          S.score += 15 * S.combo;
         } else {
           sndHit();
           a.alive = false;
@@ -983,16 +1148,29 @@ function stepAliens() {
   if (!alive.length) return;
 
   const pad = 50;
-  const maxV = DIFF.maxV;
 
   alive.forEach(a => {
-    if (a.isBoss) {
-      // Boss moves slower in easy, chases gently in adults
+    const maxV = (a.isBoss && S.bossPhase2) ? 58 : DIFF.maxV;
+
+    if (a.isMinion) {
+      // Minions always aggressively chase the player
+      const toX = S.playerX - a.x, toY = S.playerY - a.y;
+      const dist = Math.sqrt(toX*toX + toY*toY) || 1;
+      a.vx += (toX / dist) * 14;
+      a.vy += (toY / dist) * 14;
+    } else if (a.isBoss) {
+      // Boss moves slower in easy, chases in adults
       if (gameMode === 'adults') {
         const toX = S.playerX - a.x, toY = S.playerY - a.y;
         const dist = Math.sqrt(toX*toX + toY*toY) || 1;
-        a.vx += (toX / dist) * (4 + S.wave * 0.8);
-        a.vy += (toY / dist) * (4 + S.wave * 0.8);
+        const chaseStr = S.bossPhase2 ? (9 + S.wave * 1.6) : (4 + S.wave * 0.8);
+        a.vx += (toX / dist) * chaseStr;
+        a.vy += (toY / dist) * chaseStr;
+        // Phase 2: random juke moves to dodge player shots
+        if (S.bossPhase2 && Math.random() < 0.28) {
+          a.vx += (Math.random() * 2 - 1) * 18;
+          a.vy += (Math.random() * 2 - 1) * 13;
+        }
       } else {
         if (Math.random() < 0.45) {
           a.vx += (Math.random() * 2 - 1) * 14;
@@ -1028,9 +1206,9 @@ function stepAliens() {
 
   syncAliens();
 
-  // Hop animation (skip boss — it has its own float animation)
+  // Hop animation (skip boss and minions — they have their own float animations)
   alive.forEach(a => {
-    if (!a.el || a.isBoss) return;
+    if (!a.el || a.isBoss || a.isMinion) return;
     a.el.classList.remove('hop');
     void a.el.offsetWidth;
     a.el.classList.add('hop');
@@ -1042,6 +1220,8 @@ function stepAliens() {
 ══════════════════════════════════════════════ */
 function loseLife() {
   S.lives--;
+  S.streak = 0; S.streakLastHit = 0;
+  S.multiFeedCharge = 0; updateMultiFeedDisplay();
   updateHUD();
   sndLifeLost();
 
@@ -1164,6 +1344,8 @@ function spawnWaveAliens(advanceWave) {
   // Reset per-wave stats
   S.shotsFired = 0; S.shotsHit = 0;
   S.combo = 1; clearTimeout(S.comboTimer); updateComboDisplay();
+  S.streak = 0; S.streakLastHit = 0;
+  S.multiFeedCharge = 0; updateMultiFeedDisplay();
   S.bullets.forEach(b => b.el.remove()); S.bullets = [];
   S.aliens.forEach(a => { if (a.el) { a.el.remove(); a.el = null; } });
 
@@ -1262,15 +1444,63 @@ function updateBossBar() {
   const pct = Math.round((1 - S.bossHp / S.bossMaxHp) * 100);
   document.getElementById('boss-bar-fill').style.width = pct + '%';
   const label = pct < 25 ? 'Ravenous!' : pct < 50 ? 'Still hungry...' : pct < 75 ? 'Getting full!' : pct < 100 ? 'Almost full!' : 'STUFFED!';
-  document.getElementById('boss-bar-label').textContent = `🦒 ${label} (${pct}% full)`;
+  const rage = S.bossPhase2 ? '💢 ' : '';
+  document.getElementById('boss-bar-label').textContent = `🦒 ${rage}${label} (${pct}% full)`;
+  if (S.bossPhase2) {
+    document.getElementById('boss-bar-fill').style.background = 'linear-gradient(90deg,#cc0000,#ff4400,#ff8800)';
+    document.getElementById('boss-bar-track').style.borderColor = '#ff3300';
+  }
+}
+
+function activateBossPhase2(boss) {
+  S.bossPhase2 = true;
+  if (boss.el) boss.el.classList.add('phase2');
+  // Speed surge — boss gets much faster
+  boss.vx *= 1.7;
+  boss.vy *= 1.7;
+  sndBossEnrage();
+  updateBossBar();
+  spawnBossMinions();
+  showGameToast('🦒💢 GIRAFFE ENRAGED!', '#ff4444');
+}
+
+function spawnBossMinions() {
+  if (S.bossMinionsSpawned) return;
+  S.bossMinionsSpawned = true;
+  const area = document.getElementById('game-area');
+  const minionSize = Math.round(Math.min(S.W * 0.075, 52));
+  const spawns = [
+    { x: S.W * 0.2, y: S.H * 0.32, vx:  DIFF.initVx * 1.6, vy: DIFF.initVy * 1.4 },
+    { x: S.W * 0.8, y: S.H * 0.32, vx: -DIFF.initVx * 1.6, vy: DIFF.initVy * 1.4 },
+  ];
+  spawns.forEach(sp => {
+    const el = document.createElement('div');
+    el.className = 'alien boss-minion';
+    el.textContent = '🦒';
+    el.style.left = sp.x + 'px';
+    el.style.top  = sp.y + 'px';
+    el.style.fontSize = minionSize + 'px';
+    area.appendChild(el);
+    S.aliens.push({
+      x: sp.x, y: sp.y,
+      emoji: '🦒', alive: true, el,
+      isMinion: true,
+      size: minionSize,
+      vx: sp.vx, vy: sp.vy,
+    });
+  });
 }
 
 function spawnBossWave() {
   S.isBossWave = true;
   S.bossMaxHp  = (gameMode === 'adults') ? BOSS_HP_HARD : BOSS_HP_EASY;
   S.bossHp     = S.bossMaxHp;
+  S.bossPhase2 = false;
+  S.bossMinionsSpawned = false;
   S.shotsFired = 0; S.shotsHit = 0;
   S.combo = 1; clearTimeout(S.comboTimer); updateComboDisplay();
+  S.streak = 0; S.streakLastHit = 0;
+  S.multiFeedCharge = 0; updateMultiFeedDisplay();
   S.bullets.forEach(b => b.el.remove()); S.bullets = [];
   S.aliens.forEach(a => { if (a.el) { a.el.remove(); a.el = null; } });
 
@@ -1338,6 +1568,7 @@ function startGame(mode) {
   syncPlayer();
   updateHUD();
   updateComboDisplay();
+  updateMultiFeedDisplay();
   alienTimer = 0;
   lastTs = performance.now();
   rafId = requestAnimationFrame(loop);
