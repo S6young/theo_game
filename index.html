@@ -761,7 +761,7 @@ const MULTI_FEED_MAX      = 3;     // max multi-feed charges held at once
 const MULTI_FOOD_EMOJI    = '🍕';  // emoji for multi-feed bullets
 const TIME_BASE_EASY   = 15;  // seconds for wave 1 (easy/friends)
 const TIME_BASE_ADULTS = 15;  // seconds for wave 1 (adults)
-const TIME_GROW        = 7;   // extra seconds added per wave (smaller = more time pressure at high waves)
+const TIME_GROW        = 4;   // extra seconds added per wave (smaller = more time pressure at high waves)
 const TIME_BOSS_EASY   = 120; // seconds for boss wave (easy)
 const TIME_BOSS_ADULTS = 80;  // seconds for boss wave (adults)
 let gameMode = 'theo';
@@ -1398,6 +1398,14 @@ function stepAliens() {
     // Extra kick upward — regular animals dart faster toward the top of the screen
     if (!a.isBoss && !a.isMinion && a.vy < 0) {
       a.vy -= 6;
+    }
+    // Homing boost: when an animal is in the bottom third and the player has retreated
+    // to the top third, the animal can change direction faster to chase them down
+    if (!a.isBoss && !a.isMinion && a.y > S.H * (2 / 3) && S.playerY < S.H / 3) {
+      const toX = S.playerX - a.x, toY = S.playerY - a.y;
+      const dist = Math.sqrt(toX * toX + toY * toY) || 1;
+      a.vx += (toX / dist) * 12;
+      a.vy += (toY / dist) * 12;
     }
     a.vx = Math.max(-maxV, Math.min(maxV, a.vx));
     a.vy = Math.max(-maxV, Math.min(maxV, a.vy));
