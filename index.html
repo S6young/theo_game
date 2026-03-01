@@ -699,11 +699,11 @@ let foodIdx = 0;
 const COMBO_WINDOW  = 2500; // ms between hits to keep combo alive
 const MAX_WAVES     = 5;    // waves before win in easy/friends mode
 const BOSS_WAVE     = 3;    // boss spawns after completing this wave
-const BOSS_HP_EASY  = 10;   // hits needed in easy/friends mode
-const BOSS_HP_HARD  = 20;   // hits needed in adults mode
+const BOSS_HP_EASY  = 15;   // hits needed in easy/friends mode
+const BOSS_HP_HARD  = 30;   // hits needed in adults mode
 const BOSS_PHASE2_PCT     = 0.5;   // HP fraction at which boss enrages in adults mode
 const STREAK_WINDOW       = 1200;  // ms between hits to maintain a rapid streak
-const STREAK_THRESHOLD    = 3;     // hits in a row to earn one multi-feed charge
+const STREAK_THRESHOLD    = 5;     // hits in a row to earn one multi-feed charge
 const MULTI_FEED_MAX      = 3;     // max multi-feed charges held at once
 const MULTI_FOOD_EMOJI    = '🍕';  // emoji for multi-feed bullets
 const TIME_BASE_EASY   = 90;  // seconds per wave (easy/friends)
@@ -1163,18 +1163,18 @@ function stepAliens() {
       if (gameMode === 'adults') {
         const toX = S.playerX - a.x, toY = S.playerY - a.y;
         const dist = Math.sqrt(toX*toX + toY*toY) || 1;
-        const chaseStr = S.bossPhase2 ? (9 + S.wave * 1.6) : (4 + S.wave * 0.8);
+        const chaseStr = S.bossPhase2 ? (5 + S.wave * 0.9) : (2 + S.wave * 0.4);
         a.vx += (toX / dist) * chaseStr;
         a.vy += (toY / dist) * chaseStr;
         // Phase 2: random juke moves to dodge player shots
         if (S.bossPhase2 && Math.random() < 0.28) {
-          a.vx += (Math.random() * 2 - 1) * 18;
-          a.vy += (Math.random() * 2 - 1) * 13;
+          a.vx += (Math.random() * 2 - 1) * 10;
+          a.vy += (Math.random() * 2 - 1) * 7;
         }
       } else {
         if (Math.random() < 0.45) {
-          a.vx += (Math.random() * 2 - 1) * 14;
-          a.vy += (Math.random() * 2 - 1) * 10;
+          a.vx += (Math.random() * 2 - 1) * 7;
+          a.vy += (Math.random() * 2 - 1) * 5;
         }
       }
     } else if (gameMode === 'adults') {
