@@ -1417,7 +1417,7 @@ async function triggerWaveComplete() {
     if (tBonus > 0)      bParts.push(`+${tBonus} speed bonus! (${secs}s left)`);
     if (noDeathBonus > 0) bParts.push(`+${noDeathBonus} flawless!`);
     await showWaveBanner(
-      `<div class="bt">🦒 BOSS DEFEATED! 🎉</div><div class="bs">${bParts.join('  ')}</div>`, 2800
+      `<div class="bt">🦒 BOSS FED! 🎉</div><div class="bs">${bParts.join('  ')}</div>`, 2800
     );
     if (gameMode !== 'adults' && S.wave >= MAX_WAVES) { triggerWin(); return; }
     await showWaveBanner(
