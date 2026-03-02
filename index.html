@@ -756,7 +756,7 @@ const BOSS_HP_EASY  = 15;   // hits needed in easy/friends mode
 const BOSS_HP_HARD  = 30;   // hits needed in adults mode
 const BOSS_PHASE2_PCT     = 0.5;   // HP fraction at which boss enrages in adults mode
 const STREAK_WINDOW       = 6000;  // ms between hits to maintain a rapid streak
-const STREAK_THRESHOLD    = 3;     // hits in a row to earn one multi-feed charge
+const STREAK_THRESHOLD    = 6;     // hits in a row to earn one multi-feed charge
 const MULTI_FEED_MAX      = 3;     // max multi-feed charges held at once
 const MULTI_FOOD_EMOJI    = '🍕';  // emoji for multi-feed bullets
 const TIME_BASE_EASY   = 12;  // seconds for wave 1 (easy/friends)
@@ -780,6 +780,7 @@ function setDifficulty(mode) {
 ══════════════════════════════════════════════ */
 let S = {}; // game state
 let rafId = null, lastTs = 0, alienTimer = 0;
+let respawnLock = false; // blocks mouse/touch from overriding position reset after death
 const keys = {};
 
 /* ══════════════════════════════════════════════
@@ -1458,17 +1459,19 @@ function stepAliens() {
       a.vy -= 6;
     }
     // Homing boost: when an animal is in the bottom half and the player has retreated
-    // to the top half, the animal can change direction faster to chase them down.
-    // Boost scales down slightly with wave so early waves feel most punishing.
+    // to the top half, snap velocity hard toward the player and allow the cap
+    // to be exceeded so they visibly accelerate upward.
     if (!a.isBoss && !a.isMinion && a.y > S.H / 2 && S.playerY < S.H / 2) {
       const toX = S.playerX - a.x, toY = S.playerY - a.y;
       const dist = Math.sqrt(toX * toX + toY * toY) || 1;
-      const homingStr = Math.max(18, 28 - S.wave * 1.5);
-      a.vx += (toX / dist) * homingStr;
-      a.vy += (toY / dist) * homingStr;
+      // Directly set velocity toward player at boosted speed, ignoring current direction
+      const homingSpd = maxV * 2;
+      a.vx = (toX / dist) * homingSpd;
+      a.vy = (toY / dist) * homingSpd;
+    } else {
+      a.vx = Math.max(-maxV, Math.min(maxV, a.vx));
+      a.vy = Math.max(-maxV, Math.min(maxV, a.vy));
     }
-    a.vx = Math.max(-maxV, Math.min(maxV, a.vx));
-    a.vy = Math.max(-maxV, Math.min(maxV, a.vy));
   });
 }
 
@@ -1505,10 +1508,11 @@ function loseLife() {
       document.getElementById('game-container').style.background = 'radial-gradient(ellipse at 50% 30%, #2a0050 0%, #0d0030 40%, #000015 100%)';
     }, 400);
 
-    // Reset player to bottom center
+    // Reset player to bottom center; lock mouse/touch until wave restarts
     S.playerX = S.W / 2;
     S.playerY = S.H - 70;
     syncPlayer();
+    respawnLock = true;
 
     if (gameMode === 'adults') {
       // Kill remaining aliens, pause 2s, then respawn same wave (or boss)
@@ -1522,6 +1526,7 @@ function loseLife() {
       const msg = wasBoss ? '🦒 The giraffe is back!' : '😤 They\'re coming back!';
       showWaveBanner(`<div class="bt">${msg}</div><div class="bs">Get ready...</div>`, 2200)
         .then(() => {
+          respawnLock = false;
           wasBoss ? spawnBossWave() : spawnWaveAliens(false);
           S.waveStartTime = savedStart + (performance.now() - bannerAt); // preserve elapsed time
         });
@@ -1535,6 +1540,7 @@ function loseLife() {
       const savedStart = S.waveStartTime, bannerAt = performance.now();
       showWaveBanner(`<div class="bt">🦒 The giraffe is hungry again!</div><div class="bs">Get ready...</div>`, 2200)
         .then(() => {
+          respawnLock = false;
           spawnBossWave();
           S.waveStartTime = savedStart + (performance.now() - bannerAt); // preserve elapsed time
         });
@@ -1568,6 +1574,7 @@ function resetAlienPositions() {
 
   alienTimer = 0;
   lastTs = performance.now();
+  respawnLock = false;
   rafId = requestAnimationFrame(loop);
 }
 
@@ -1940,7 +1947,7 @@ const area = document.getElementById('game-area');
 
 // Mouse
 area.addEventListener('mousemove', e => {
-  if (S.gameOver || S.won) return;
+  if (S.gameOver || S.won || respawnLock) return;
   const r = area.getBoundingClientRect();
   S.playerX = e.clientX - r.left;
   S.playerY = e.clientY - r.top;
@@ -1957,7 +1964,7 @@ area.addEventListener('click', e => {
 area.addEventListener('touchstart', e => {
   if (e.target.closest('#power-btn')) return; // let power button handle its own tap
   e.preventDefault();
-  if (S.gameOver || S.won) return;
+  if (S.gameOver || S.won || respawnLock) return;
   const t = e.touches[0];
   const r = area.getBoundingClientRect();
   S.playerX = t.clientX - r.left;
@@ -1970,7 +1977,7 @@ area.addEventListener('touchstart', e => {
 
 area.addEventListener('touchmove', e => {
   e.preventDefault();
-  if (S.gameOver || S.won) return;
+  if (S.gameOver || S.won || respawnLock) return;
   const t = e.touches[0];
   const r = area.getBoundingClientRect();
   S.playerX = t.clientX - r.left;
