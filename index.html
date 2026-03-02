@@ -1307,7 +1307,7 @@ function loop(ts) {
       return;
     }
     const ratio = Math.min(1, minDist / (S.H * 0.55));
-    const waveScale = Math.max(0.4, 1 - (S.wave - 1) * 0.12); // 12% faster per wave, min 40%
+    const waveScale = Math.max(0.4, 1 - (S.wave - 1) * 0.08); // 8% faster per wave, min 40%
     S.moveMs = (DIFF.moveNear + ratio * (DIFF.moveFar - DIFF.moveNear)) * waveScale * (S.slowed ? 2.5 : 1);
   }
   alienTimer += dt;
@@ -1623,9 +1623,9 @@ function spawnWaveAliens(advanceWave) {
   const marginX = Math.min(W * 0.12, 60);
   const spacing  = (W - marginX * 2) / (COLS - 1);
   const rowH     = Math.min(70, H * 0.11);
-  const speedScale = 1 + (S.wave - 1) * 0.18;
+  const speedScale = 1 + (S.wave - 1) * 0.13;
   // Armored animals start at wave 2, +10% per wave (capped at 55%)
-  const armorChance = S.wave >= 2 ? Math.min(0.10 * (S.wave - 1), 0.55) : 0;
+  const armorChance = S.wave >= 2 ? Math.min(0.07 * (S.wave - 1), 0.55) : 0;
 
   S.aliens = [];
   for (let r = 0; r < ROWS; r++) {
